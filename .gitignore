@@ -5,9 +5,13 @@ node_modules/
 .next/
 *.tar.gz
 
-# ── Go ──────────────────────────────────────────────────────────────
+# ── Go ────────────────────────────────────────────────────────────
 *.sum
 vendor/
+
+# ── Go backend artifacts ──────────────────────────────────────────
+backend/server
+backend/go.sum
 
 # ── Fabric generated artifacts ─────────────────────────────────────
 network/organizations/

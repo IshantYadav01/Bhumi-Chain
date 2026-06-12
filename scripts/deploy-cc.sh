@@ -8,7 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NETWORK_DIR="$(dirname "$SCRIPT_DIR")/network"
-CHAINCODE_DIR="$(dirname "$SCRIPT_DIR")/chaincode/go/landreg"
+CHAINCODE_DIR="$(dirname "$SCRIPT_DIR")/backend/chaincode/go/landreg"
 CC_NAME="landreg"
 CC_VERSION="1.0"
 CC_SEQUENCE=1

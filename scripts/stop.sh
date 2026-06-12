@@ -1,11 +1,15 @@
 #!/bin/bash
 # =============================================================================
-# stop.sh — Tear down the Hyperledger Fabric network.
+# stop.sh — Tear down the Hyperledger Fabric network and Go backend.
 # =============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NETWORK_DIR="$(dirname "$SCRIPT_DIR")/network"
+PROJ_DIR="$(dirname "$SCRIPT_DIR")"
+NETWORK_DIR="$PROJ_DIR/network"
+
+# Stop Go backend
+pkill -f 'backend/server' 2>/dev/null && echo "✔ Go backend stopped." || true
 
 cd "$NETWORK_DIR"
 
@@ -17,7 +21,6 @@ COMPOSE_PROJECT_NAME=fabric docker compose down -v --remove-orphans
 
 echo ""
 echo "✔ Network stopped. All containers & volumes removed."
-echo "   Containers: orderer, municipality, malpot, survey, landregistry, finance, cli"
 
 # Optional: clean up chaincode container images
 if [ "${1:-}" = "--clean" ]; then

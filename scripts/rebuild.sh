@@ -18,6 +18,8 @@ echo "╚═══════════════════════�
 
 # 1. Tear down
 log "Tearing down..."
+# Stop Go backend if running
+pkill -f 'backend/server' 2>/dev/null || true
 cd network
 COMPOSE_PROJECT_NAME=fabric docker compose down -v --remove-orphans 2>/dev/null || true
 docker rmi -f $(docker images -q --filter "reference=dev-peer*landreg*") 2>/dev/null || true
@@ -26,7 +28,7 @@ ok "Cleaned"
 
 # 2. Go deps
 log "Chaincode deps..."
-cd ../chaincode/go/landreg && go mod tidy 2>/dev/null; cd ../../../network
+cd ../backend/chaincode/go/landreg && go mod tidy 2>/dev/null; cd ../../../network
 
 # 3. cryptogen
 log "Generating MSP certs..."
@@ -216,7 +218,7 @@ ok "Chaincode committed"
 # 10. Seed samples
 log "Seeding sample plots..."
 sleep 5
-# Build peer args for all 3 provinces (9-of-11 endorsement)
+# Build peer args for all 3 provinces
 PA=""
 for i in $(seq 1 3); do
     o="province${i}"; p=$((7051+(i-1)*1000))
@@ -229,3 +231,32 @@ for i in $(seq 1 4); do
     docker exec cli peer chaincode invoke -o orderer.example.com:7050 --tls --cafile ${ORDERER_CA} -C mychannel -n landreg ${PA} \
         -c "{\"function\":\"RegisterLand\",\"Args\":[\"plot-00${i}\",\"SN-${i}001\",\"Owner${i}\",\"${loc}\",\"${prov}\",\"$((i*200)).0\",\"residential\"]}" 2>&1 | tail -1
 done
+ok "Seeded 4 sample plots"
+
+# 11. Build & start Go backend
+log "Building Go backend (Fabric Gateway SDK)..."
+cd ../backend
+pkill -f 'backend/server' 2>/dev/null || true
+go mod tidy 2>&1
+go build -o server . 2>&1
+if [ $? -eq 0 ]; then
+    ok "Go backend built"
+    PROJECT_ROOT="$(pwd)/.." nohup ./server > backend.log 2>&1 &
+    sleep 2
+    if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+        ok "Go backend running on :8080"
+    else
+        log "Go backend may still be starting (check backend/backend.log)"
+    fi
+else
+    log "Go build failed - skipping backend start"
+fi
+cd ..
+
+echo ""
+ok "======================================="
+ok "  Land Registry is LIVE!"
+ok "  Frontend : http://localhost:3000"
+ok "  Backend  : http://localhost:8080"
+ok "  Health   : http://localhost:8080/health"
+ok "======================================="
