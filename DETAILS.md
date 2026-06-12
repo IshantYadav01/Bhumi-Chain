@@ -1,6 +1,6 @@
 # DETAILS.md — AI Agent Reference
 
-> **Target audience**: AI coding agents, automated tooling.  
+> **Target audience**: AI coding agents, automated tooling.
 > **Human readers**: See `README.md`.
 
 ---
@@ -10,9 +10,10 @@
 Private Hyperledger Fabric v2.5 land registry with:
 
 - **3 provincial full nodes** (Province1–Province3) — test; scale to 11 for production
-- **77 malpots, buyers, sellers, officials** as lite nodes (connect via frontend or SDK)
+- **77 malpots, buyers, sellers, officials** as lite nodes (connect via frontend)
 - **Go chaincode** `landreg` — 12 functions: register, transfer, split, mortgage, dispute, queries
-- **Next.js frontend** at `:3000` — CLI-based Fabric backend (no SDK in browser)
+- **Go backend** at `:8080` — Fabric Gateway SDK (gRPC), per-user X.509 signing
+- **Next.js frontend** at `:3000` — proxies `/api/*` to Go backend, no SDK needed
 - **`rebuild.sh`** — one-command full lifecycle
 
 ---
@@ -34,8 +35,26 @@ Private Hyperledger Fabric v2.5 land registry with:
 - Chaincode port: `7052 + (i-1)*1000`
 - MSP ID: `Province${i}MSP`
 - Network: `fabric-net` (explicit `name:` to avoid prefix)
+- CLI volume mount: `../backend/chaincode:/opt/gopath/.../peer/chaincode` (maps host `backend/chaincode/` into container)
 
-### 2.2 Chaincode (`chaincode/go/landreg/`)
+### 2.2 Go Backend (`backend/`)
+
+| File | Role |
+|------|------|
+| `main.go` | HTTP server (Gin), routes, CORS, graceful shutdown |
+| `config/config.go` | Env-based config with defaults (`BACKEND_PORT`, `GATEWAY_PEER`, `CRYPTO_PATH`, etc.) |
+| `fabric/client.go` | Gateway client pool — lazy per-identity connections, gRPC, double-checked locking |
+| `fabric/identity.go` | Loads X.509 identities from cryptogen MSP dirs (`signcerts/cert.pem` + `keystore/*_sk`) |
+| `handlers/land.go` | All 13 REST API endpoints — `QueryLand` (GET), `PostAction` (POST dispatcher) |
+| `models/models.go` | Request/response DTOs — `ActionRequest`, `RegisterRequest`, `APIResponse`, etc. |
+| `go.mod` | Module `github.com/ndhack/backend`, deps: `fabric-gateway v1.5.1`, `gin v1.10.0`, `grpc` |
+| `server` | Compiled binary (23 MB) — built by `go build -o server .` |
+
+**Identity pool**: Clients keyed by `"{org}/{user}"` (e.g. `"province1/User1"`). Created lazily on first use, cached with `sync.RWMutex`. Default identity from env `FABRIC_ORG`/`FABRIC_USER`, per-request override via `X-Identity` header.
+
+**Gateway connection**: gRPC to `localhost:7051` (Province1 peer), TLS with `InsecureSkipVerify: true` (dev only — hostname mismatch). Endorsement collection handled automatically by the gateway peer via service discovery.
+
+### 2.3 Chaincode (`backend/chaincode/go/landreg/`)
 
 | File | Role |
 |------|------|
@@ -63,52 +82,41 @@ type LandRecord struct {
 
 **SplitLand** takes a JSON string of child specs: `[{"plotId":"...","owner":"...","area":...}]`. Parent marked `"split"`, children created with `parentPlotId` tracking.
 
-### 2.3 Frontend (`frontend/`)
+### 2.4 Frontend (`frontend/`)
 
 | File | Role |
 |------|------|
-| `lib/fabric.js` | **Core backend**. Uses `child_process.execSync` to run `docker exec cli peer chaincode ...`. Exports 13 functions. |
-| `app/api/land/route.js` | Next.js API: `GET /api/land` (with `?id`, `?owner`, `?status`, `?province`, `?parent` filters), `POST` dispatches by `action` field |
 | `app/page.js` | "use client" component — land table, forms, status tabs, owner filter, detail panel |
 | `app/layout.js` | Root layout — dark theme |
+| `next.config.js` | Rewrites `/api/*` → `http://localhost:8080/api/*` (proxy to Go backend) |
+| `package.json` | `next`, `react`, `react-dom` only — no Fabric SDK dependency |
 
-**Why CLI, not SDK**: `fabric-network` can't bundle in Next.js (dynamic requires in `fabric-common`, `nconf`/`yargs`). CLI approach is reliable and handles multi-peer endorsement correctly.
+**Frontend calls `/api/land?...`** — Next.js proxies to Go backend. No `docker exec`, no CLI dependency, no `fabric-network` npm package.
 
-**`cliInvoke` targets all peers** (not just a subset):
-
-```js
-for (let i = 1; i <= 3; i++) {
-    peerArgs.push("--peerAddresses", `peer0.province${i}.example.com:${PORT}`);
-    peerArgs.push("--tlsRootCertFiles", peerTls(`province${i}`));
-}
-```
-
-### 2.4 Scripts (`scripts/`)
+### 2.5 Scripts (`scripts/`)
 
 | Script | Role |
 |--------|------|
-| `rebuild.sh` | ★ **Primary entry point**. Tear down → go mod tidy → cryptogen → generate configtx.yaml → configtxgen → generate docker-compose.yaml → docker compose up → channel create → join all peers → update anchors → deploy chaincode (install, approve, commit on all peers) → seed samples |
-| `generate.sh` | Individual step: cryptogen + configtxgen (legacy, for 2-org setup) |
+| `rebuild.sh` | ★ **Primary entry point**. Tear down → chaincode deps → cryptogen → configtxgen → compose up → channel + anchors → deploy chaincode → **build & start Go backend** → seed via curl |
+| `generate.sh` | Individual step: cryptogen + configtxgen (legacy) |
 | `start.sh` | Individual step: compose up + channel (legacy) |
 | `deploy-cc.sh` | Individual step: chaincode lifecycle (legacy) |
-| `stop.sh` | Tear down |
+| `stop.sh` | Tear down — kills Go backend + docker compose down |
 
 **`rebuild.sh` key details**:
-- Line ~50: builds `configtx.yaml` via `cat >>` loop with 3 province org definitions
-- Line ~210: builds `PA` (peer args) for all 3 peers
+- Step 10: Builds Go backend first (`go build -o server`), starts it, verifies `/health`
+- Step 11: Seeds 4 sample plots via `curl` to `localhost:8080/api/land` (not `docker exec cli`)
+- Chaincode deps path: `cd ../backend/chaincode/go/landreg && go mod tidy`
 - Endorsement: `OutOf(3, 'Province1MSP.peer', 'Province2MSP.peer', 'Province3MSP.peer')`
-- Seeds 4 sample plots with `RegisterLand`
+- `docker exec cli` only used for admin ops: channel join (step 7), anchor update (step 8), chaincode lifecycle (step 9)
 
-### 2.5 Application (`application/`) — NOT USED
+### 2.6 Application (`application/`) — NOT USED
 
-The lite-node SDK client is reference-only. The frontend uses CLI. SDK issues:
-- `fabric-network` webpack incompatibility with Next.js
-- `submitTransaction` requires discovery service (not configured)
-- Fabric CA not running (no dynamic enrollment)
+The lite-node SDK client is reference-only. The Go backend handles all Fabric interaction.
 
-### 2.6 `.gitignore`
+### 2.7 `.gitignore`
 
-Ignores: `node_modules/`, `.next/`, `*.tar.gz`, `*.sum`, `vendor/`, `organizations/`, `channel-artifacts/`, `wallets/*` (except `.gitkeep`), `.env`
+Ignores: `node_modules/`, `.next/`, `*.tar.gz`, `*.sum`, `vendor/`, `backend/server`, `backend/go.sum`, `organizations/`, `channel-artifacts/`, `wallets/*`, `.env`
 
 ---
 
@@ -117,17 +125,22 @@ Ignores: `node_modules/`, `.next/`, `*.tar.gz`, `*.sum`, `vendor/`, `organizatio
 ```
 crypto-config.yaml ──► rebuild.sh ──► organizations/
                          │
-rebuild.sh generates ────┼──► configtx.yaml (11 province template → filled)
-rebuild.sh generates ────┼──► docker-compose.yaml (3 peers)
+rebuild.sh generates ────┼──► configtx.yaml
+rebuild.sh generates ────┼──► docker-compose.yaml
                          │
 configtx.yaml ──► configtxgen ──► channel-artifacts/
                          │
 docker-compose.yaml ──► docker compose up ──► containers
                          │
-landreg.go + go.mod ──► peer chaincode install/approve/commit ──► chaincode live
+landreg.go ──► peer chaincode install/approve/commit ──► chaincode live
                          │
-frontend/lib/fabric.js ◄── docker exec cli ──┘
-frontend/app/api/land/route.js ◄── fabric.js
+backend/main.go ──► go build ──► server (Go binary, :8080)
+       │                       │
+       ├── fabric/client.go ◄── gRPC ◄── Fabric peers
+       ├── handlers/land.go ◄── HTTP
+       └── config/ ◄── env vars
+                         │
+next.config.js ◄── rewrite /api/* → :8080
 frontend/app/page.js ◄── fetch(/api/land)
 ```
 
@@ -139,30 +152,39 @@ frontend/app/page.js ◄── fetch(/api/land)
 
 Change `3` → `11` in:
 1. `network/crypto-config.yaml` — add Province4–Province11 entries
-2. `scripts/rebuild.sh` — `seq 1 3` → `seq 1 11`
-3. `frontend/lib/fabric.js` — `i <= 3` → `i <= 11`
-4. Endorsement in rebuild.sh: `OutOf(3, ...)` → `OutOf(9, ...)`
-5. Run `./scripts/rebuild.sh`
+2. `scripts/rebuild.sh` — `seq 1 3` → `seq 1 11` (org definitions, channel join, anchors, chaincode lifecycle)
+3. Endorsement in rebuild.sh: `OutOf(3, ...)` → `OutOf(9, ...)`
+4. Run `./scripts/rebuild.sh`
+
+The Go backend connects to one gateway peer — no changes needed. Endorsement collection handled automatically.
 
 ### 4.2 Add a chaincode function
 
-1. Add public method to `SmartContract` in `landreg.go`
-2. `cd chaincode/go/landreg && go mod tidy`
-3. Add to `frontend/lib/fabric.js` (in `cliQuery` or `cliInvoke` style)
-4. Add action case in `frontend/app/api/land/route.js`
+1. Add public method to `SmartContract` in `backend/chaincode/go/landreg/landreg.go`
+2. `cd backend/chaincode/go/landreg && go mod tidy`
+3. Add handler method in `backend/handlers/land.go` (Evaluate for queries, Submit for invokes)
+4. Add action case in `PostAction` switch
 5. Add UI in `frontend/app/page.js`
-6. Re-deploy: `./scripts/rebuild.sh` (increments sequence)
+6. Re-deploy: `./scripts/rebuild.sh` (increments sequence if reusing `rebuild.sh`)
 
 ### 4.3 Add a field to LandRecord
 
-1. Add to `LandRecord` struct with json tag
+1. Add to `LandRecord` struct in `landreg.go` with json tag
 2. Update `RegisterLand`, `TransferLand`, `SplitLand` if needed
 3. Re-deploy
-4. Update frontend forms and API route
+4. Update frontend forms
 
 ### 4.4 Change endorsement policy
 
-Edit the `OutOf(N, ...)` line in `rebuild.sh` (~line 78). Regenerate.
+Edit the `OutOf(N, ...)` line in `rebuild.sh` (~line 80). Regenerate.
+
+### 4.5 Add a new identity (malpot, citizen)
+
+1. Add more users to `network/crypto-config.yaml` (`Users: { Count: 3 }`)
+2. Re-run rebuild.sh (regenerates MSP certs)
+3. Use `X-Identity: province1/User3` header to sign as that user
+
+In production: replace cryptogen with Fabric CA for dynamic enrollment.
 
 ---
 
@@ -174,13 +196,50 @@ Edit the `OutOf(N, ...)` line in `rebuild.sh` (~line 78). Regenerate.
 | Province1 peer | 7051/7052 | peer0.province1.example.com |
 | Province2 peer | 8051/8052 | peer0.province2.example.com |
 | Province3 peer | 9051/9052 | peer0.province3.example.com |
-| Next.js | 3000 | — |
+| Go backend | 8080 | — (host process) |
+| Next.js | 3000 | — (host process) |
 
 For N provinces: peer port = `7051 + (N-1)*1000`, chaincode = peer + 1.
 
 ---
 
-## 6. Known Issues & Fixes
+## 6. API Reference (Go Backend)
+
+### GET /api/land
+
+| Query param | Chaincode function |
+|-------------|--------------------|
+| _(none)_ | `GetAllLand` |
+| `?id=X` | `QueryLand(X)` |
+| `?owner=X` | `GetLandByOwner(X)` |
+| `?status=X` | `GetLandByStatus(X)` |
+| `?province=X` | `GetLandByProvince(X)` |
+| `?parent=X` | `GetChildrenOf(X)` |
+
+### POST /api/land
+
+Body: `{"action": "<action>", ...fields}`
+
+| action | Required fields | Chaincode function |
+|--------|----------------|--------------------|
+| `register` | `plotId`, `owner` | `RegisterLand` |
+| `transfer` | `plotId`, `buyer` | `TransferLand` |
+| `split` | `plotId`, `children` | `SplitLand` |
+| `mortgage` | `plotId`, `bank` | `SetMortgage` |
+| `clear-mortgage` | `plotId` | `ClearMortgage` |
+| `dispute` | `plotId`, `caseNumber` | `FileDispute` |
+| `resolve-dispute` | `plotId` | `ResolveDispute` |
+
+### Headers
+
+| Header | Purpose |
+|--------|---------|
+| `X-Identity: org/user` | Sign transaction as specific user (e.g. `province2/User1`) |
+| _(none)_ | Uses default identity (env `FABRIC_ORG`/`FABRIC_USER`, fallback `province1/User1`) |
+
+---
+
+## 7. Known Issues & Fixes
 
 | Issue | Symptom | Fix |
 |-------|---------|-----|
@@ -189,11 +248,14 @@ For N provinces: peer port = `7051 + (N-1)*1000`, chaincode = peer + 1.
 | `etcdraft config missing` | Genesis fails | `EtcdRaft.Consenters` must be present in configtx |
 | Schema validation: "field is required" | Query returns error | Query functions return `string` (raw JSON), not typed struct |
 | Literal `\n` in YAML | configtxgen parse error | Use `$'\n'` (ANSI-C quoting) in bash, not `\n` |
-| `go mod tidy` fails | Bad pseudo-version | Use `fabric-contract-api-go/v2 v2.0.0` |
+| `go mod tidy` fails (chaincode) | Bad pseudo-version | Use `fabric-contract-api-go/v2 v2.0.0` |
+| Go backend can't connect | TLS hostname mismatch | `InsecureSkipVerify: true` for dev (peer uses `peer0.province1.example.com`, we connect to `localhost`) |
+| Go backend can't find MSP dirs | `PROJECT_ROOT` wrong | Set `PROJECT_ROOT` env var or run from `backend/` |
+| Gateway connection refused | Chaincode not committed yet | Wait for chaincode commit before starting backend |
 
 ---
 
-## 7. Generated / Git-Ignored
+## 8. Generated / Git-Ignored
 
 | Path | Created by | Contents |
 |------|-----------|----------|
@@ -201,5 +263,8 @@ For N provinces: peer port = `7051 + (N-1)*1000`, chaincode = peer + 1.
 | `network/channel-artifacts/` | configtxgen | genesis.block, channel.tx, anchor .tx |
 | `network/configtx.yaml` | rebuild.sh | Generated from template (overwritten each run) |
 | `network/docker-compose.yaml` | rebuild.sh | Generated from template (overwritten each run) |
+| `backend/server` | `go build` | Go backend binary |
+| `backend/go.sum` | `go mod tidy` | Dependency checksums |
+| `backend/backend.log` | `nohup` | Backend runtime logs |
 | `frontend/.next/` | Next.js | Build output |
 | `frontend/node_modules/` | npm | Dependencies |

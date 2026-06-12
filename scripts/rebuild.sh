@@ -215,25 +215,7 @@ done
 peer_cmd "peer lifecycle chaincode commit -o orderer.example.com:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${ORDERER_CA} --channelID mychannel --name ${CC} --version ${CV} --sequence ${CS} ${PA}" 2>&1 | tail -1
 ok "Chaincode committed"
 
-# 10. Seed samples
-log "Seeding sample plots..."
-sleep 5
-# Build peer args for all 3 provinces
-PA=""
-for i in $(seq 1 3); do
-    o="province${i}"; p=$((7051+(i-1)*1000))
-    PA="${PA} --peerAddresses peer0.${o}.example.com:${p} --tlsRootCertFiles /opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/${o}.example.com/peers/peer0.${o}.example.com/tls/ca.crt"
-done
-
-for i in $(seq 1 4); do
-    loc="Location${i}"
-    prov="Province$(( (i-1) % 3 + 1 ))"
-    docker exec cli peer chaincode invoke -o orderer.example.com:7050 --tls --cafile ${ORDERER_CA} -C mychannel -n landreg ${PA} \
-        -c "{\"function\":\"RegisterLand\",\"Args\":[\"plot-00${i}\",\"SN-${i}001\",\"Owner${i}\",\"${loc}\",\"${prov}\",\"$((i*200)).0\",\"residential\"]}" 2>&1 | tail -1
-done
-ok "Seeded 4 sample plots"
-
-# 11. Build & start Go backend
+# 10. Build & start Go backend
 log "Building Go backend (Fabric Gateway SDK)..."
 cd ../backend
 pkill -f 'backend/server' 2>/dev/null || true
@@ -249,9 +231,22 @@ if [ $? -eq 0 ]; then
         log "Go backend may still be starting (check backend/backend.log)"
     fi
 else
-    log "Go build failed - skipping backend start"
+    log "Go build failed - cannot seed"
+    exit 1
 fi
 cd ..
+
+# 11. Seed samples via Go backend (not docker exec CLI)
+log "Seeding sample plots via Go backend..."
+sleep 3
+for i in $(seq 1 4); do
+    loc="Location${i}"
+    prov="Province$(( (i-1) % 3 + 1 ))"
+    curl -s -X POST http://localhost:8080/api/land \
+        -H "Content-Type: application/json" \
+        -d "{\"action\":\"register\",\"plotId\":\"plot-00${i}\",\"surveyNumber\":\"SN-${i}001\",\"owner\":\"Owner${i}\",\"location\":\"${loc}\",\"province\":\"${prov}\",\"area\":$((i*200)),\"landType\":\"residential\"}" | grep -q "success" && ok "  plot-00${i}" || log "  plot-00${i} failed"
+done
+ok "Seeded 4 sample plots via Go backend"
 
 echo ""
 ok "======================================="

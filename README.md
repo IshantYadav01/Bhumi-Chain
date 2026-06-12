@@ -115,8 +115,6 @@ ndhack/
 │   ├── app/
 │   │   ├── page.js                 # land registry UI
 │   │   ├── layout.js
-│   │   └── api/land/route.js       # (deprecated — proxied to Go backend)
-│   ├── lib/fabric.js               # (deprecated — replaced by Go backend)
 │   └── next.config.js              # proxy /api/* → :8080
 │
 ├── application/                    # lite-node SDK client (unused — reference only)
