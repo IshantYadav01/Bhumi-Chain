@@ -64,12 +64,12 @@ Land records track ownership, mortgages, and legal disputes. Transfers require e
 ## Quick Start
 
 ```bash
-# One command: tear down, generate crypto, start 3 peers, deploy chaincode,
-# seed data, build & start Go backend
+# First time: full build (tear down, generate crypto, deploy chaincode, seed)
 ./scripts/rebuild.sh
 
-# Start the dashboard
-cd frontend && npm install && npm run dev
+# Fast reload: ~4s restart without rebuilding Fabric
+./scripts/quickstart.sh           # backend only
+./scripts/quickstart.sh -f        # backend + frontend
 ```
 
 Open **http://localhost:3000** — live land registry dashboard.
