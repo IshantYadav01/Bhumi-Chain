@@ -32,8 +32,8 @@ fi
 
 # ── 2. Permissions (Docker gen'd files may be root-owned) ───────────
 if [ ! -r "$PROJ/network/organizations/peerOrganizations/province1.example.com/users/User1@province1.example.com/msp/keystore/priv_sk" ]; then
-    info "Fixing permissions..."
-    sudo chown -R "$(whoami)" "$PROJ/network/organizations" 2>/dev/null || true
+    info "MSP files are root-owned — fixing (sudo may prompt)..."
+    sudo chown -R "$(whoami)" "$PROJ/network/organizations"
     ok "Permissions fixed"
 fi
 

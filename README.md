@@ -122,9 +122,6 @@ ndhack/
 │
 ├── scripts/
 │   ├── rebuild.sh                  # ★ one-command full rebuild
-│   ├── generate.sh                 # cryptogen + configtxgen
-│   ├── start.sh                    # docker compose up + channel join
-│   ├── deploy-cc.sh                # package → install → approve → commit
 │   └── stop.sh                     # tear down (Fabric + Go backend)
 │
 ├── .gitignore

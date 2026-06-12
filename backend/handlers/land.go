@@ -58,7 +58,7 @@ func (h *LandHandler) GetAllLand(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return
 	}
-	c.Data(http.StatusOK, "application/json", raw)
+	sendJSON(c, raw)
 }
 
 func (h *LandHandler) QueryLand(c *gin.Context) {
@@ -93,6 +93,15 @@ func (h *LandHandler) QueryLand(c *gin.Context) {
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
+		return
+	}
+	sendJSON(c, raw)
+}
+
+// sendJSON ensures the response is never nil (Gin sends "null" for nil bytes).
+func sendJSON(c *gin.Context, raw []byte) {
+	if raw == nil {
+		c.Data(http.StatusOK, "application/json", []byte("[]"))
 		return
 	}
 	c.Data(http.StatusOK, "application/json", raw)

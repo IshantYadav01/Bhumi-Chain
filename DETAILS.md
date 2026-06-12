@@ -98,9 +98,6 @@ type LandRecord struct {
 | Script | Role |
 |--------|------|
 | `rebuild.sh` | ★ **Primary entry point**. Tear down → chaincode deps → cryptogen → configtxgen → compose up → channel + anchors → deploy chaincode → **build & start Go backend** → seed via curl |
-| `generate.sh` | Individual step: cryptogen + configtxgen (legacy) |
-| `start.sh` | Individual step: compose up + channel (legacy) |
-| `deploy-cc.sh` | Individual step: chaincode lifecycle (legacy) |
 | `stop.sh` | Tear down — kills Go backend + docker compose down |
 
 **`rebuild.sh` key details**:

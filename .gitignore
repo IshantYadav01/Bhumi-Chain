@@ -1,26 +1,23 @@
-# ── Dependencies ──────────────────────────────────────────────────────
+# ── Dependencies ────────────────────────────────────────────────────
 node_modules/
 
 # ── Build output ────────────────────────────────────────────────────
 .next/
 *.tar.gz
+package-lock.json
 
-# ── Go ────────────────────────────────────────────────────────────
+# ── Go ──────────────────────────────────────────────────────────────
 *.sum
 vendor/
 
-# ── Go backend artifacts ──────────────────────────────────────────
+# ── Go backend artifacts ────────────────────────────────────────────
 backend/server
 backend/go.sum
+backend/backend.log
 
-# ── Fabric generated artifacts ─────────────────────────────────────
+# ── Fabric generated artifacts ──────────────────────────────────────
 network/organizations/
 network/channel-artifacts/
-
-# ── Wallets (contains private keys — never commit) ─────────────────
-application/wallets/*
-!application/wallets/.gitkeep
-frontend/wallet-cache/
 
 # ── OS / editor ─────────────────────────────────────────────────────
 .DS_Store
@@ -31,9 +28,9 @@ Thumbs.db
 .idea/
 .vscode/
 
-# ── Logs ────────────────────────────────────────────────────────────
+# ── Logs ─────────────────────────────────────────────────────────────
 *.log
 
-# ── Env ─────────────────────────────────────────────────────────────
+# ── Env ──────────────────────────────────────────────────────────────
 .env
 .env.local

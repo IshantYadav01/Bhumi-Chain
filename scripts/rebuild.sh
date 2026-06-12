@@ -34,6 +34,8 @@ cd ../backend/chaincode/go/landreg && go mod tidy 2>/dev/null; cd ../../../../ne
 log "Generating MSP certs..."
 docker run --rm -v "$(pwd):/work" -w /work hyperledger/fabric-tools:2.5 \
     cryptogen generate --config=/work/crypto-config.yaml --output=/work/organizations
+# Fix root-owned files so Go backend can read private keys
+sudo chown -R "$(whoami)" organizations 2>/dev/null || true
 ok "Certs done"
 
 # 4. Build configtx.yaml with 3 provinces
