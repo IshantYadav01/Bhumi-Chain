@@ -1,4 +1,6 @@
-.next/
+# Dependencies
 node_modules/
-dist/
-build/
+
+# Build
+.next/
+*.tar.gz

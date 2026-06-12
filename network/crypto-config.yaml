@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
-# Hyperledger Fabric crypto-config.yaml
-# Defines the organisational structure for which MSP material is generated.
-# Run: cryptogen generate --config=./crypto-config.yaml --output=./organizations
+# crypto-config.yaml — 3 Provincial Full Nodes (test)
+# 77 Malpots, buyers, sellers, officials = lite nodes (connect via SDK)
+# Scale to 11 provinces for production.
 # ---------------------------------------------------------------------------
 
 OrdererOrgs:
@@ -10,21 +10,22 @@ OrdererOrgs:
     EnableNodeOUs: true
     Specs:
       - Hostname: orderer
-      # Add more orderer specs for multi-orderer RAFT clusters
 
 PeerOrgs:
-  - Name: Org1
-    Domain: org1.example.com
+  - Name: Province1
+    Domain: province1.example.com
     EnableNodeOUs: true
-    Template:
-      Count: 1                # Peers per org (full nodes)
-    Users:
-      Count: 1                # Admin + user identities for lite-node clients
+    Template: { Count: 1 }
+    Users: { Count: 2 }
 
-  - Name: Org2
-    Domain: org2.example.com
+  - Name: Province2
+    Domain: province2.example.com
     EnableNodeOUs: true
-    Template:
-      Count: 1
-    Users:
-      Count: 1
+    Template: { Count: 1 }
+    Users: { Count: 2 }
+
+  - Name: Province3
+    Domain: province3.example.com
+    EnableNodeOUs: true
+    Template: { Count: 1 }
+    Users: { Count: 2 }

@@ -57,20 +57,60 @@ docker run --rm \
     -w /work \
     -e FABRIC_CFG_PATH=/work \
     hyperledger/fabric-tools:2.5 \
-    configtxgen -profile ChannelDemo -outputCreateChannelTx /work/channel-artifacts/channel.tx -channelID mychannel
+    configtxgen -profile LandChannel -outputCreateChannelTx /work/channel-artifacts/channel.tx -channelID mychannel
 
 echo "  ✔ channel.tx written to channel-artifacts/"
 
-# ── Anchor peer updates ─────────────────────────────────────────────
-for org in org1 org2; do
-    docker run --rm \
-        -v "$(pwd):/work" \
-        -w /work \
-        -e FABRIC_CFG_PATH=/work \
-        hyperledger/fabric-tools:2.5 \
-        configtxgen -profile ChannelDemo -outputAnchorPeersUpdate /work/channel-artifacts/${org}MSPanchors.tx -channelID mychannel -asOrg ${org^}MSP
-    echo "  ✔ ${org}MSPanchors.tx written"
-done
+# ── Anchor peer updates for all 5 department orgs ───────────────────
+# configtxgen lowercases the MSP name in the output filename
+# (e.g. MunicipalityMSP → municipalityMSPanchors.tx)
+echo ""
+echo "▶ Generating anchor peer updates for all 5 orgs..."
+
+# Municipality
+docker run --rm \
+    -v "$(pwd):/work" \
+    -w /work \
+    -e FABRIC_CFG_PATH=/work \
+    hyperledger/fabric-tools:2.5 \
+    configtxgen -profile LandChannel -outputAnchorPeersUpdate /work/channel-artifacts/municipalityMSPanchors.tx -channelID mychannel -asOrg MunicipalityMSP
+echo "  ✔ municipalityMSPanchors.tx written"
+
+# Malpot
+docker run --rm \
+    -v "$(pwd):/work" \
+    -w /work \
+    -e FABRIC_CFG_PATH=/work \
+    hyperledger/fabric-tools:2.5 \
+    configtxgen -profile LandChannel -outputAnchorPeersUpdate /work/channel-artifacts/malpotMSPanchors.tx -channelID mychannel -asOrg MalpotMSP
+echo "  ✔ malpotMSPanchors.tx written"
+
+# Survey
+docker run --rm \
+    -v "$(pwd):/work" \
+    -w /work \
+    -e FABRIC_CFG_PATH=/work \
+    hyperledger/fabric-tools:2.5 \
+    configtxgen -profile LandChannel -outputAnchorPeersUpdate /work/channel-artifacts/surveyMSPanchors.tx -channelID mychannel -asOrg SurveyMSP
+echo "  ✔ surveyMSPanchors.tx written"
+
+# LandRegistry
+docker run --rm \
+    -v "$(pwd):/work" \
+    -w /work \
+    -e FABRIC_CFG_PATH=/work \
+    hyperledger/fabric-tools:2.5 \
+    configtxgen -profile LandChannel -outputAnchorPeersUpdate /work/channel-artifacts/landregistryMSPanchors.tx -channelID mychannel -asOrg LandRegistryMSP
+echo "  ✔ landregistryMSPanchors.tx written"
+
+# Finance
+docker run --rm \
+    -v "$(pwd):/work" \
+    -w /work \
+    -e FABRIC_CFG_PATH=/work \
+    hyperledger/fabric-tools:2.5 \
+    configtxgen -profile LandChannel -outputAnchorPeersUpdate /work/channel-artifacts/financeMSPanchors.tx -channelID mychannel -asOrg FinanceMSP
+echo "  ✔ financeMSPanchors.tx written"
 
 echo ""
 echo "╔══════════════════════════════════════════╗"

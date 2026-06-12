@@ -1,96 +1,54 @@
 ---
-# ---------------------------------------------------------------------------
-# configtx.yaml — Channel / genesis-block configuration
-# ---------------------------------------------------------------------------
-
 Organizations:
-  - &OrdererOrg
-    Name: OrdererOrg
-    ID: OrdererMSP
-    MSPDir: organizations/ordererOrganizations/example.com/msp
+  - &Province1
+    Name: Province1MSP
+    ID: Province1MSP
+    MSPDir: organizations/peerOrganizations/province1.example.com/msp
     Policies:
-      Readers:
-        Type: Signature
-        Rule: "OR('OrdererMSP.member')"
-      Writers:
-        Type: Signature
-        Rule: "OR('OrdererMSP.member')"
-      Admins:
-        Type: Signature
-        Rule: "OR('OrdererMSP.admin')"
-    OrdererEndpoints:
-      - orderer.example.com:7050
-
-  - &Org1
-    Name: Org1MSP
-    ID: Org1MSP
-    MSPDir: organizations/peerOrganizations/org1.example.com/msp
-    Policies:
-      Readers:
-        Type: Signature
-        Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client')"
-      Writers:
-        Type: Signature
-        Rule: "OR('Org1MSP.admin', 'Org1MSP.client')"
-      Admins:
-        Type: Signature
-        Rule: "OR('Org1MSP.admin')"
-      Endorsement:
-        Type: Signature
-        Rule: "OR('Org1MSP.peer')"
+      Readers: { Type: Signature, Rule: "OR('Province1MSP.admin','Province1MSP.peer','Province1MSP.client')" }
+      Writers: { Type: Signature, Rule: "OR('Province1MSP.admin','Province1MSP.client')" }
+      Admins: { Type: Signature, Rule: "OR('Province1MSP.admin')" }
+      Endorsement: { Type: Signature, Rule: "OR('Province1MSP.peer')" }
     AnchorPeers:
-      - Host: peer0.org1.example.com
+      - Host: peer0.province1.example.com
         Port: 7051
-
-  - &Org2
-    Name: Org2MSP
-    ID: Org2MSP
-    MSPDir: organizations/peerOrganizations/org2.example.com/msp
+  - &Province2
+    Name: Province2MSP
+    ID: Province2MSP
+    MSPDir: organizations/peerOrganizations/province2.example.com/msp
     Policies:
-      Readers:
-        Type: Signature
-        Rule: "OR('Org2MSP.admin', 'Org2MSP.peer', 'Org2MSP.client')"
-      Writers:
-        Type: Signature
-        Rule: "OR('Org2MSP.admin', 'Org2MSP.client')"
-      Admins:
-        Type: Signature
-        Rule: "OR('Org2MSP.admin')"
-      Endorsement:
-        Type: Signature
-        Rule: "OR('Org2MSP.peer')"
+      Readers: { Type: Signature, Rule: "OR('Province2MSP.admin','Province2MSP.peer','Province2MSP.client')" }
+      Writers: { Type: Signature, Rule: "OR('Province2MSP.admin','Province2MSP.client')" }
+      Admins: { Type: Signature, Rule: "OR('Province2MSP.admin')" }
+      Endorsement: { Type: Signature, Rule: "OR('Province2MSP.peer')" }
     AnchorPeers:
-      - Host: peer0.org2.example.com
+      - Host: peer0.province2.example.com
+        Port: 8051
+  - &Province3
+    Name: Province3MSP
+    ID: Province3MSP
+    MSPDir: organizations/peerOrganizations/province3.example.com/msp
+    Policies:
+      Readers: { Type: Signature, Rule: "OR('Province3MSP.admin','Province3MSP.peer','Province3MSP.client')" }
+      Writers: { Type: Signature, Rule: "OR('Province3MSP.admin','Province3MSP.client')" }
+      Admins: { Type: Signature, Rule: "OR('Province3MSP.admin')" }
+      Endorsement: { Type: Signature, Rule: "OR('Province3MSP.peer')" }
+    AnchorPeers:
+      - Host: peer0.province3.example.com
         Port: 9051
-
 Capabilities:
-  Channel: &ChannelCapabilities
-    V2_0: true
-  Orderer: &OrdererCapabilities
-    V2_0: true
-  Application: &ApplicationCapabilities
-    V2_5: true
-
+  Channel: &ChannelCapabilities { V2_0: true }
+  Orderer: &OrdererCapabilities { V2_0: true }
+  Application: &ApplicationCapabilities { V2_5: true }
 Application: &ApplicationDefaults
   Organizations:
   Policies:
-    Readers:
-      Type: ImplicitMeta
-      Rule: "ANY Readers"
-    Writers:
-      Type: ImplicitMeta
-      Rule: "ANY Writers"
-    Admins:
-      Type: ImplicitMeta
-      Rule: "MAJORITY Admins"
-    LifecycleEndorsement:
-      Type: ImplicitMeta
-      Rule: "MAJORITY Endorsement"
-    Endorsement:
-      Type: ImplicitMeta
-      Rule: "MAJORITY Endorsement"
+    Readers: { Type: ImplicitMeta, Rule: "ANY Readers" }
+    Writers: { Type: ImplicitMeta, Rule: "ANY Writers" }
+    Admins: { Type: ImplicitMeta, Rule: "MAJORITY Admins" }
+    LifecycleEndorsement: { Type: ImplicitMeta, Rule: "MAJORITY Endorsement" }
+    Endorsement: { Type: Signature, Rule: "OutOf(3, 'Province1MSP.peer', 'Province2MSP.peer', 'Province3MSP.peer')" }
   Capabilities: *ApplicationCapabilities
-
 Orderer: &OrdererDefaults
   OrdererType: etcdraft
   EtcdRaft:
@@ -99,64 +57,51 @@ Orderer: &OrdererDefaults
         Port: 7050
         ClientTLSCert: organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
         ServerTLSCert: organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
-  Addresses:
-    - orderer.example.com:7050
+  Addresses: [orderer.example.com:7050]
   BatchTimeout: 2s
-  BatchSize:
-    MaxMessageCount: 10
-    AbsoluteMaxBytes: 99 MB
-    PreferredMaxBytes: 512 KB
+  BatchSize: { MaxMessageCount: 10, AbsoluteMaxBytes: 99 MB, PreferredMaxBytes: 512 KB }
   Organizations:
   Policies:
-    Readers:
-      Type: ImplicitMeta
-      Rule: "ANY Readers"
-    Writers:
-      Type: ImplicitMeta
-      Rule: "ANY Writers"
-    Admins:
-      Type: ImplicitMeta
-      Rule: "MAJORITY Admins"
-    BlockValidation:
-      Type: ImplicitMeta
-      Rule: "ANY Writers"
+    Readers: { Type: ImplicitMeta, Rule: "ANY Readers" }
+    Writers: { Type: ImplicitMeta, Rule: "ANY Writers" }
+    Admins: { Type: ImplicitMeta, Rule: "MAJORITY Admins" }
+    BlockValidation: { Type: ImplicitMeta, Rule: "ANY Writers" }
   Capabilities: *OrdererCapabilities
-
 Channel: &ChannelDefaults
   Policies:
-    Readers:
-      Type: ImplicitMeta
-      Rule: "ANY Readers"
-    Writers:
-      Type: ImplicitMeta
-      Rule: "ANY Writers"
-    Admins:
-      Type: ImplicitMeta
-      Rule: "MAJORITY Admins"
+    Readers: { Type: ImplicitMeta, Rule: "ANY Readers" }
+    Writers: { Type: ImplicitMeta, Rule: "ANY Writers" }
+    Admins: { Type: ImplicitMeta, Rule: "MAJORITY Admins" }
   Capabilities: *ChannelCapabilities
-
 Profiles:
-  # Genesis block for the ordering service
   OrdererGenesis:
     <<: *ChannelDefaults
     Orderer:
       <<: *OrdererDefaults
       Organizations:
-        - *OrdererOrg
+        - &OrdererOrg
+          Name: OrdererOrg
+          ID: OrdererMSP
+          MSPDir: organizations/ordererOrganizations/example.com/msp
+          Policies:
+            Readers: { Type: Signature, Rule: "OR('OrdererMSP.member')" }
+            Writers: { Type: Signature, Rule: "OR('OrdererMSP.member')" }
+            Admins: { Type: Signature, Rule: "OR('OrdererMSP.admin')" }
+          OrdererEndpoints: [orderer.example.com:7050]
       Capabilities: *OrdererCapabilities
     Consortiums:
-      SampleConsortium:
+      LandConsortium:
         Organizations:
-          - *Org1
-          - *Org2
-
-  # Channel creation transaction
-  ChannelDemo:
-    Consortium: SampleConsortium
+          - *Province1
+          - *Province2
+          - *Province3
+  LandChannel:
+    Consortium: LandConsortium
     <<: *ChannelDefaults
     Application:
       <<: *ApplicationDefaults
       Organizations:
-        - *Org1
-        - *Org2
+        - *Province1
+        - *Province2
+        - *Province3
       Capabilities: *ApplicationCapabilities

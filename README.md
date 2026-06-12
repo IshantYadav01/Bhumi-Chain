@@ -1,6 +1,8 @@
-# NDHACK — Hyperledger Fabric Base Project
+# Land Registry — Private Blockchain System
 
-A production-ready Hyperledger Fabric network with **N full nodes**, **unlimited lite nodes**, a Go chaincode, and a Next.js frontend.
+A **Hyperledger Fabric** land registry with **5 department full nodes**, **unlimited lite nodes** (buyers, sellers, officials), mortgage tracking, and legal dispute management.
+
+Land transfers require **tri-department endorsement** from Municipality, Malpot, and Survey departments.
 
 ## Architecture
 
@@ -8,36 +10,38 @@ A production-ready Hyperledger Fabric network with **N full nodes**, **unlimited
                          Ordering Service (RAFT)
                        orderer.example.com:7050
                                   │
-                 ┌────────────────┼────────────────┐
-                 │                                 │
-          ┌──────▼──────┐                   ┌──────▼──────┐
-          │  Org1 Peer   │◄──── gossip ────►│  Org2 Peer   │
-          │  :7051       │                   │  :9051       │
-          └──────┬──────┘                   └──────┬──────┘
-                 │                                 │
-                 └─────────────┬───────────────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              │                │                │
-         ┌────▼────┐     ┌────▼────┐      ┌────▼────┐
-         │  Lite   │     │  Lite   │ ...  │  Lite   │    ← unlimited
-         │  Node 1 │     │  Node 2 │      │  Node N │
-         └─────────┘     └─────────┘      └─────────┘
-              │                │                │
-              └────────────────┼────────────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │   Next.js Frontend   │
-                    │   localhost:3001     │
-                    └─────────────────────┘
+     ┌──────────┬──────────┬──────┼──────┬──────────┐
+     │          │          │      │      │          │
+  Municipality Malpot   Survey  LandReg  Finance  │
+  (Full Node) (Full N) (Full N)(Full N)(Full N)  │  5 departments
+     │          │          │      │      │        │
+     └──────────┴──────────┼──────┴──────┘        │
+                           │                      │
+              ┌────────────┼────────────┐         │
+              │            │            │         │
+           Buyer        Seller      Officials      │
+         (Lite Node)  (Lite Node)  (Lite Nodes)    │  ← unlimited
+              │            │            │         │
+              └────────────┼────────────┘         │
+                           │                      │
+                    ┌──────▼──────┐               │
+                    │  Next.js UI │               │
+                    │  :3000      │               │
+                    └─────────────┘               │
+                                                  │
+     ... scale to 11 departments by adding 6 more peer orgs
 ```
 
 | Component | What it is | Scale |
 |-----------|-----------|-------|
-| **Full node** | Peer container — holds full ledger copy, endorses transactions | N orgs × M peers |
-| **Lite node** | Node.js SDK client — submits/queries, stateless | Unlimited |
+| **Full node** | Department peer — holds full ledger, endorses transactions | 5 (scale to 11) |
+| **Lite node** | Buyer, seller, or official — submits transactions via SDK / UI | Unlimited |
 | **Orderer** | RAFT-based ordering service | 1 (dev) / 3–5 (prod) |
-| **Frontend** | Next.js dashboard — live asset manager | 1 browser tab |
+| **Frontend** | Next.js land registry dashboard | 1 browser tab |
+
+**Land transfer flow**: Buyer → Seller → endorsed by **Municipality + Malpot + Survey** (3-of-3 observer endorsement).
+
+Land can be **mortgaged** or in **legal dispute** — both states are recorded on the ledger and visible in the UI.
 
 ---
 
@@ -57,27 +61,28 @@ A production-ready Hyperledger Fabric network with **N full nodes**, **unlimited
 ## Quick Start (5 minutes)
 
 ```bash
-# 1. Generate crypto material + channel artifacts
+# 1. Generate crypto + channel artifacts for 5 department orgs
 ./scripts/generate.sh
 
-# 2. Start full nodes (orderer + 2 peers + admin CLI)
+# 2. Start full nodes (orderer + 5 department peers)
 ./scripts/start.sh
 
-# 3. Deploy the chaincode to all peers
+# 3. Deploy land registry chaincode + seed 4 sample plots
 ./scripts/deploy-cc.sh
 
 # 4. Start the frontend
 cd frontend && npm install && npm run dev
 ```
 
-Open **http://localhost:3001** — you'll see the asset dashboard.
+Open **http://localhost:3000** — the land registry dashboard.
 
-The network is now live with:
+The network is live with:
 - `orderer.example.com:7050`
-- `peer0.org1.example.com:7051`
-- `peer0.org2.example.com:9051`
-
-The frontend auto-connects and shows live ledger data.
+- `peer0.municipality.example.com:7051`
+- `peer0.malpot.example.com:8051`
+- `peer0.survey.example.com:9051`
+- `peer0.landregistry.example.com:10051`
+- `peer0.finance.example.com:11051`
 
 ---
 
@@ -184,20 +189,24 @@ docker exec cli peer channel getinfo -c mychannel
 
 ---
 
-## Chaincode API
+## Chaincode API (landreg)
 
-| Function | Type | Arguments | Description |
-|----------|------|-----------|-------------|
-| `InitLedger` | Write | _(none)_ | Seeds 4 sample assets |
-| `CreateAsset` | Write | `id`, `owner`, `value`, `color`, `size` | Add new asset |
-| `ReadAsset` | Read | `id` | Get one asset |
-| `UpdateAsset` | Write | `id`, `color`, `value`, `size` | Modify asset fields |
-| `DeleteAsset` | Write | `id` | Remove an asset |
-| `TransferAsset` | Write | `id`, `newOwner` | Change ownership |
-| `GetAllAssets` | Read | _(none)_ | List all assets |
-| `AssetExists` | Read | `id` | Check existence |
+| Function | Type | Arguments |
+|----------|------|-----------|
+| `RegisterLand` | Write | `plotId`, `surveyNumber`, `owner`, `location`, `area`, `landType` |
+| `TransferLand` | Write | `plotId`, `buyer`, `price` |
+| `SetMortgage` | Write | `plotId`, `bank`, `amount`, `startDate`, `endDate` |
+| `ClearMortgage` | Write | `plotId` |
+| `FileDispute` | Write | `plotId`, `caseNumber`, `court`, `description` |
+| `ResolveDispute` | Write | `plotId` |
+| `QueryLand` | Read | `plotId` |
+| `GetLandByOwner` | Read | `owner` |
+| `GetLandByStatus` | Read | `status` |
+| `GetAllLand` | Read | _(none)_ |
 
-Reads are fast (single peer). Writes go through both peers (MAJORITY endorsement).
+**Endorsement**: `OutOf(3, MunicipalityMSP, MalpotMSP, SurveyMSP)` — land transfers require all 3 observers.
+
+**Land states**: `active` → can be sold | `mortgaged` → blocked until cleared | `disputed` → blocked until resolved
 
 ---
 

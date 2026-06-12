@@ -1,17 +1,22 @@
 # ── Dependencies ──────────────────────────────────────────────────────
 node_modules/
 
-# ── Fabric artifacts (generated) ────────────────────────────────────
+# ── Build output ────────────────────────────────────────────────────
+.next/
+*.tar.gz
+
+# ── Go ──────────────────────────────────────────────────────────────
+*.sum
+vendor/
+
+# ── Fabric generated artifacts ─────────────────────────────────────
 network/organizations/
 network/channel-artifacts/
 
-# ── Wallets (contains private keys) ─────────────────────────────────
-application/wallets/*/
+# ── Wallets (contains private keys — never commit) ─────────────────
+application/wallets/*
 !application/wallets/.gitkeep
-
-# ── Chaincode binaries ──────────────────────────────────────────────
-*.tar.gz
-chaincode/go/basic/vendor/
+frontend/wallet-cache/
 
 # ── OS / editor ─────────────────────────────────────────────────────
 .DS_Store
@@ -24,3 +29,7 @@ Thumbs.db
 
 # ── Logs ────────────────────────────────────────────────────────────
 *.log
+
+# ── Env ─────────────────────────────────────────────────────────────
+.env
+.env.local

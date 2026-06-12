@@ -1,19 +1,17 @@
 /**
- * fabric.js — Fabric network helper (CLI-only approach).
- *
- * All operations use `docker exec cli peer chaincode ...` for maximum
- * compatibility with Next.js API routes.
+ * fabric.js — Land Registry backend (CLI-based).
+ * Chaincode: landreg  |  Channel: mychannel
+ * Endorsement: all 3 provinces must endorse (test env).
  */
 
 const { execSync } = require("child_process");
 
-// ── Constants ─────────────────────────────────────────────────────
 const ORDERER_CA =
   "/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem";
-const PEER1_TLS =
-  "/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt";
-const PEER2_TLS =
-  "/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt";
+
+function peerTls(org) {
+  return `/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/${org}.example.com/peers/peer0.${org}.example.com/tls/ca.crt`;
+}
 
 function docker(args) {
   const cmd = ["docker", "exec", "cli", ...args]
@@ -22,8 +20,7 @@ function docker(args) {
   return execSync(cmd, { encoding: "utf-8", timeout: 30000 });
 }
 
-// ── Query helper ──────────────────────────────────────────────────
-
+// ── Query ──────────────────────────────────────────────────────────
 function cliQuery(fcn, ...args) {
   const ctor = JSON.stringify({ function: fcn, Args: args });
   const stdout = docker([
@@ -33,30 +30,30 @@ function cliQuery(fcn, ...args) {
     "-C",
     "mychannel",
     "-n",
-    "basic",
+    "landreg",
     "-c",
     ctor,
   ]);
-
-  const trimmed = stdout.trim();
-  // Empty ledger returns empty output — return empty array for GetAllAssets / empty obj for ReadAsset
-  if (!trimmed) {
-    return [];
-  }
-  const lines = trimmed.split("\n");
-  for (const line of lines) {
-    const t = line.trim();
-    if ((t.startsWith("[") || t.startsWith("{")) && !t.includes("INFO")) {
-      return JSON.parse(t);
-    }
+  const t = stdout.trim();
+  if (!t) return [];
+  for (const line of t.split("\n")) {
+    const s = line.trim();
+    if ((s.startsWith("[") || s.startsWith("{")) && !s.includes("INFO"))
+      return JSON.parse(s);
   }
   return [];
 }
 
-// ── Invoke helper ─────────────────────────────────────────────────
-
+// ── Invoke (9-of-11 endorsement — target all 11 provinces) ─────────
 function cliInvoke(fcn, ...args) {
   const ctor = JSON.stringify({ function: fcn, Args: args });
+  const peerArgs = [];
+  for (let i = 1; i <= 3; i++) {
+    const org = "province" + i;
+    const port = 7051 + (i - 1) * 1000;
+    peerArgs.push("--peerAddresses", `peer0.${org}.example.com:${port}`);
+    peerArgs.push("--tlsRootCertFiles", peerTls(org));
+  }
   const stdout = docker([
     "peer",
     "chaincode",
@@ -69,75 +66,85 @@ function cliInvoke(fcn, ...args) {
     "-C",
     "mychannel",
     "-n",
-    "basic",
-    "--peerAddresses",
-    "peer0.org1.example.com:7051",
-    "--tlsRootCertFiles",
-    PEER1_TLS,
-    "--peerAddresses",
-    "peer0.org2.example.com:9051",
-    "--tlsRootCertFiles",
-    PEER2_TLS,
+    "landreg",
+    ...peerArgs,
     "-c",
     ctor,
   ]);
-
-  const lines = stdout.trim().split("\n");
-  const joined = lines.join(" ");
-  if (
-    joined.includes("chaincode invoke successful") ||
-    joined.includes("status:200") ||
-    joined.includes("Successfully submitted")
-  ) {
-    return { success: true };
-  }
-  // Also check stderr for success
-  return { success: true }; // assume success if no explicit error
+  return { success: true };
 }
 
 // ── Public API ─────────────────────────────────────────────────────
-
-async function getAllAssets() {
-  return cliQuery("GetAllAssets");
+async function getAllLand() {
+  return cliQuery("GetAllLand");
+}
+async function queryLand(id) {
+  return cliQuery("QueryLand", id);
+}
+async function getLandByOwner(o) {
+  return cliQuery("GetLandByOwner", o);
+}
+async function getLandByStatus(s) {
+  return cliQuery("GetLandByStatus", s);
+}
+async function getLandByProvince(p) {
+  return cliQuery("GetLandByProvince", p);
+}
+async function getChildrenOf(pid) {
+  return cliQuery("GetChildrenOf", pid);
 }
 
-async function readAsset(id) {
-  return cliQuery("ReadAsset", id);
-}
-
-function createAsset(id, owner, value, color, size) {
+function registerLand(
+  plotId,
+  surveyNo,
+  owner,
+  location,
+  province,
+  area,
+  landType,
+) {
   return cliInvoke(
-    "CreateAsset",
-    id,
+    "RegisterLand",
+    plotId,
+    surveyNo,
     owner,
-    String(value),
-    color,
-    String(size),
+    location,
+    province,
+    String(area),
+    landType,
   );
 }
-
-function updateAsset(id, color, value, size) {
-  return cliInvoke("UpdateAsset", id, color, String(value), String(size));
+function transferLand(plotId, buyer, price) {
+  return cliInvoke("TransferLand", plotId, buyer, String(price));
 }
-
-function deleteAsset(id) {
-  return cliInvoke("DeleteAsset", id);
+function splitLand(parentPlotId, childrenJSON) {
+  return cliInvoke("SplitLand", parentPlotId, childrenJSON);
 }
-
-function transferAsset(id, newOwner) {
-  return cliInvoke("TransferAsset", id, newOwner);
+function setMortgage(plotId, bank, amount, start, end) {
+  return cliInvoke("SetMortgage", plotId, bank, String(amount), start, end);
 }
-
-function initLedger() {
-  return cliInvoke("InitLedger");
+function clearMortgage(plotId) {
+  return cliInvoke("ClearMortgage", plotId);
+}
+function fileDispute(plotId, caseNo, court, desc) {
+  return cliInvoke("FileDispute", plotId, caseNo, court, desc);
+}
+function resolveDispute(plotId) {
+  return cliInvoke("ResolveDispute", plotId);
 }
 
 module.exports = {
-  getAllAssets,
-  readAsset,
-  createAsset,
-  updateAsset,
-  deleteAsset,
-  transferAsset,
-  initLedger,
+  getAllLand,
+  queryLand,
+  getLandByOwner,
+  getLandByStatus,
+  getLandByProvince,
+  getChildrenOf,
+  registerLand,
+  transferLand,
+  splitLand,
+  setMortgage,
+  clearMortgage,
+  fileDispute,
+  resolveDispute,
 };

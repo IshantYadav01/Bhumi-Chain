@@ -1,4 +1,4 @@
-module github.com/ndhack/basic
+module github.com/ndhack/landreg
 
 go 1.22
 
