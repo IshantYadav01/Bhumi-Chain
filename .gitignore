@@ -1,0 +1,26 @@
+# ── Dependencies ──────────────────────────────────────────────────────
+node_modules/
+
+# ── Fabric artifacts (generated) ────────────────────────────────────
+network/organizations/
+network/channel-artifacts/
+
+# ── Wallets (contains private keys) ─────────────────────────────────
+application/wallets/*/
+!application/wallets/.gitkeep
+
+# ── Chaincode binaries ──────────────────────────────────────────────
+*.tar.gz
+chaincode/go/basic/vendor/
+
+# ── OS / editor ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# ── Logs ────────────────────────────────────────────────────────────
+*.log

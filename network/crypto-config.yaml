@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# Hyperledger Fabric crypto-config.yaml
+# Defines the organisational structure for which MSP material is generated.
+# Run: cryptogen generate --config=./crypto-config.yaml --output=./organizations
+# ---------------------------------------------------------------------------
+
+OrdererOrgs:
+  - Name: Orderer
+    Domain: example.com
+    EnableNodeOUs: true
+    Specs:
+      - Hostname: orderer
+      # Add more orderer specs for multi-orderer RAFT clusters
+
+PeerOrgs:
+  - Name: Org1
+    Domain: org1.example.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1                # Peers per org (full nodes)
+    Users:
+      Count: 1                # Admin + user identities for lite-node clients
+
+  - Name: Org2
+    Domain: org2.example.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+    Users:
+      Count: 1

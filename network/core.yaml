@@ -1,0 +1,207 @@
+# ---------------------------------------------------------------------------
+# core.yaml — Peer node configuration
+# Copy this and customise per peer, or use env-var overrides.
+# ---------------------------------------------------------------------------
+
+logging:
+  level: info
+
+peer:
+  id: peer0.org1.example.com
+  networkId: dev
+  listenAddress: 0.0.0.0:7051
+  chaincodeListenAddress: 0.0.0.0:7052
+  address: peer0.org1.example.com:7051
+
+  gateway:
+    enabled: true
+    endorsementTimeout: 30s
+    dialTimeout: 10s
+
+  gossip:
+    bootstrap: peer0.org1.example.com:7051
+    useLeaderElection: true
+    orgLeader: false
+    endpoint:
+    maxBlockCountToStore: 10
+    maxPropagationBurstLatency: 50ms
+    maxPropagationBurstSize: 10
+    propagateIterations: 1
+    propagatePeerNum: 3
+    pullInterval: 4s
+    pullPeerNum: 3
+    requestStateInfoInterval: 4s
+    publishStateInfoInterval: 4s
+    stateInfoRetentionInterval:
+    publishCertPeriod: 10s
+    skipBlockVerification: false
+    dialTimeout: 3s
+    connTimeout: 2s
+    recvBuffSize: 20
+    sendBuffSize: 200
+    digestWaitTime: 1s
+    requestWaitTime: 1500ms
+    responseWaitTime: 2s
+    aliveTimeInterval: 5s
+    aliveExpirationTimeout: 25s
+    reconnectInterval: 25s
+    externalEndpoint: peer0.org1.example.com:7051
+    election:
+      startupGracePeriod: 15s
+      membershipSampleInterval: 1s
+      leaderAliveThreshold: 10s
+      leaderElectionDuration: 5s
+    pvtData:
+      pullRetryThreshold: 60s
+      transientstoreMaxBlockRetention: 20000
+      pushAckTimeout: 3s
+      btlPullMargin: 10
+      reconcileBatchSize: 10
+      reconcileSleepInterval: 1m
+      reconciliationEnabled: true
+      skipPullingInvalidTransactionsDuringCommit: false
+
+  tls:
+    enabled: true
+    cert:
+      file: /etc/hyperledger/fabric/tls/server.crt
+    key:
+      file: /etc/hyperledger/fabric/tls/server.key
+    rootcert:
+      file: /etc/hyperledger/fabric/tls/ca.crt
+    clientRootCAs:
+      files:
+        - /etc/hyperledger/fabric/tls/ca.crt
+    clientAuthRequired: false
+
+  authentication:
+    timewindow: 15m
+
+  BCCSP:
+    Default: SW
+    SW:
+      Hash: SHA2
+      Security: 256
+      FileKeyStore:
+        KeyStore:
+
+  mspConfigPath: /etc/hyperledger/fabric/msp
+
+  localMspId: Org1MSP
+
+  deliveryclient:
+    reconnectTotalTimeThreshold: 3600s
+    connTimeout: 3s
+    reConnectBackoffThreshold: 3600s
+    blockGossipEnabled: true
+
+  localMspType: bccsp
+
+  profile:
+    enabled: false
+    listenAddress: 0.0.0.0:6060
+
+  handlers:
+    authFilters:
+      - name: DefaultAuth
+      - name: ExpirationCheck
+    decorators:
+      - name: DefaultDecorator
+    endorsers:
+      escc:
+        name: DefaultEndorsement
+        library:
+    validators:
+      vscc:
+        name: DefaultValidation
+        library:
+
+  validatorPoolSize:
+
+  keepalive:
+    minInterval: 60s
+    client:
+      interval: 60s
+      timeout: 20s
+    deliveryClient:
+      interval: 60s
+      timeout: 20s
+
+  discovery:
+    enabled: true
+    authCacheEnabled: true
+    authCacheMaxSize: 1000
+    authCachePurgeRetentionRatio: 0.75
+    orgMembersAllowedAccess: false
+
+vm:
+  endpoint: unix:///host/var/run/docker.sock
+  docker:
+    tls:
+      enabled: false
+    attachStdout: false
+    hostConfig:
+      NetworkMode: host
+      Dns:
+      LogConfig:
+        Type: json-file
+        Config:
+          max-size: "50m"
+          max-file: "5"
+      Memory: 2147483648
+
+chaincode:
+  id:
+    path:
+    name:
+  builder: $(DOCKER_NS)/fabric-ccenv:$(TWO_DIGIT_VERSION)
+  pull: false
+  golang:
+    runtime: $(DOCKER_NS)/fabric-baseos:$(TWO_DIGIT_VERSION)
+  java:
+    runtime: $(DOCKER_NS)/fabric-javaenv:$(TWO_DIGIT_VERSION)
+  node:
+    runtime: $(DOCKER_NS)/fabric-nodeenv:$(TWO_DIGIT_VERSION)
+  externalBuilders: []
+  installTimeout: 300s
+  startuptimeout: 300s
+  executetimeout: 30s
+  keepalive: 0s
+  system:
+    _lifecycle: enable
+    cscc: enable
+    lscc: enable
+    escc: enable
+    vscc: enable
+    qscc: enable
+
+ledger:
+  blockchain:
+  state:
+    stateDatabase: goleveldb
+    couchDBConfig:
+      couchDBAddress: 127.0.0.1:5984
+      username:
+      password:
+      maxRetries: 3
+      maxRetriesOnStartup: 10
+      requestTimeout: 35s
+      internalQueryLimit: 1000
+      maxBatchUpdateSize: 500
+      createGlobalChangesDB: false
+      cacheSize: 64
+  history:
+    enableHistoryDB: false
+  pvtdataStore:
+    collElgProcMaxDbBatchSize: 5000
+    collElgProcDbBatchesInterval: 1000
+    deprioritizedDataReconcilerInterval: 60m
+    purgedKeyAuditLogging: true
+
+metrics:
+  provider: disabled
+  statsd:
+    network: udp
+    address: 127.0.0.1:8125
+    writeInterval: 10s
+    prefix:

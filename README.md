@@ -1,0 +1,294 @@
+# NDHACK — Hyperledger Fabric Base Project
+
+A production-ready Hyperledger Fabric network with **N full nodes**, **unlimited lite nodes**, a Go chaincode, and a Next.js frontend.
+
+## Architecture
+
+```
+                         Ordering Service (RAFT)
+                       orderer.example.com:7050
+                                  │
+                 ┌────────────────┼────────────────┐
+                 │                                 │
+          ┌──────▼──────┐                   ┌──────▼──────┐
+          │  Org1 Peer   │◄──── gossip ────►│  Org2 Peer   │
+          │  :7051       │                   │  :9051       │
+          └──────┬──────┘                   └──────┬──────┘
+                 │                                 │
+                 └─────────────┬───────────────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                │
+         ┌────▼────┐     ┌────▼────┐      ┌────▼────┐
+         │  Lite   │     │  Lite   │ ...  │  Lite   │    ← unlimited
+         │  Node 1 │     │  Node 2 │      │  Node N │
+         └─────────┘     └─────────┘      └─────────┘
+              │                │                │
+              └────────────────┼────────────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │   Next.js Frontend   │
+                    │   localhost:3001     │
+                    └─────────────────────┘
+```
+
+| Component | What it is | Scale |
+|-----------|-----------|-------|
+| **Full node** | Peer container — holds full ledger copy, endorses transactions | N orgs × M peers |
+| **Lite node** | Node.js SDK client — submits/queries, stateless | Unlimited |
+| **Orderer** | RAFT-based ordering service | 1 (dev) / 3–5 (prod) |
+| **Frontend** | Next.js dashboard — live asset manager | 1 browser tab |
+
+---
+
+## Prerequisites
+
+| Tool | Minimum | Check |
+|------|---------|-------|
+| Docker | 20.10+ | `docker --version` |
+| Docker Compose | 2.0+ | `docker compose version` |
+| Node.js | 18+ | `node --version` |
+| Go | 1.21+ | `go version` |
+
+> You do **not** need Hyperledger Fabric binaries installed. `cryptogen`, `configtxgen`, and `peer` run inside Docker containers.
+
+---
+
+## Quick Start (5 minutes)
+
+```bash
+# 1. Generate crypto material + channel artifacts
+./scripts/generate.sh
+
+# 2. Start full nodes (orderer + 2 peers + admin CLI)
+./scripts/start.sh
+
+# 3. Deploy the chaincode to all peers
+./scripts/deploy-cc.sh
+
+# 4. Start the frontend
+cd frontend && npm install && npm run dev
+```
+
+Open **http://localhost:3001** — you'll see the asset dashboard.
+
+The network is now live with:
+- `orderer.example.com:7050`
+- `peer0.org1.example.com:7051`
+- `peer0.org2.example.com:9051`
+
+The frontend auto-connects and shows live ledger data.
+
+---
+
+## Project Layout
+
+```
+ndhack/
+├── network/                          # Fabric network definition
+│   ├── docker-compose.yaml           # Containers: orderer, peers, CLI
+│   ├── crypto-config.yaml            # Org structure → generates MSP certs
+│   ├── configtx.yaml                 # Channel, genesis, consortium config
+│   ├── core.yaml                     # Peer config reference
+│   └── orderer.yaml                  # Orderer config reference
+│
+├── chaincode/go/basic/               # Smart contract (Go)
+│   ├── basic.go                      # Asset CRUD + transfer
+│   ├── go.mod                        # Module definition
+│   └── go.sum                        # Dependency checksums
+│
+├── application/                      # Lite-node SDK client (Node.js)
+│   ├── package.json
+│   └── src/
+│       ├── connect.js                # Connection profile + Fabric SDK helpers
+│       ├── enrollAdmin.js            # Enroll org admin with Fabric CA
+│       ├── registerUser.js           # Register a lite-node user identity
+│       ├── invoke.js                 # Submit transactions from CLI
+│       ├── query.js                  # Read-only ledger queries
+│       ├── app.js                    # Multi-lite-node concurrent demo
+│       └── quick-test.js             # Standalone integration test
+│
+├── frontend/                         # Next.js dashboard (web UI)
+│   ├── package.json
+│   ├── next.config.js
+│   ├── jsconfig.json
+│   ├── lib/fabric.js                 # CLI-based Fabric backend
+│   └── app/
+│       ├── layout.js                 # Root layout (dark theme)
+│       ├── page.js                   # Main asset manager UI
+│       └── api/assets/route.js       # REST API (GET + POST)
+│
+├── scripts/
+│   ├── generate.sh                   # cryptogen + configtxgen
+│   ├── start.sh                      # docker compose up + channel join
+│   ├── deploy-cc.sh                  # Package → install → approve → commit
+│   └── stop.sh                       # docker compose down (+ optional clean)
+│
+├── config/env.sh                     # Tunable variables (org count, etc.)
+├── .gitignore
+├── README.md                         # ← you are here
+└── DETAILS.md                        # AI / contributor reference
+```
+
+---
+
+## Working with the Frontend
+
+Start it:
+
+```bash
+cd frontend
+npm install
+npm run dev          # → http://localhost:3001
+```
+
+The dashboard shows:
+
+| Feature | How |
+|---------|-----|
+| **Asset table** | Auto-refreshes every 8 seconds |
+| **Create asset** | Fill the form at the bottom, click "Create Asset" |
+| **Update asset** | Click a row → form pre-fills → edit → "Update Asset" |
+| **Transfer** | Enter asset ID + new owner in the Quick Transfer box |
+| **Delete** | Click the red **Del** button on any row |
+| **Init Ledger** | Click "Init Ledger" to seed 4 sample assets |
+| **Status dot** | Green = connected, Red = network down |
+
+The frontend talks to the Fabric network through the `cli` Docker container. No Fabric SDK needed in the browser.
+
+---
+
+## CLI: Quick Operations
+
+The admin CLI container is always running. Use it directly:
+
+```bash
+# Query all assets
+docker exec cli peer chaincode query -C mychannel -n basic \
+  -c '{"function":"GetAllAssets","Args":[]}'
+
+# Create an asset (writes need both peers for endorsement)
+docker exec cli peer chaincode invoke \
+  -o orderer.example.com:7050 --tls \
+  --cafile /opt/gopath/.../tlsca.example.com-cert.pem \
+  -C mychannel -n basic \
+  --peerAddresses peer0.org1.example.com:7051 \
+  --tlsRootCertFiles /opt/gopath/.../ca.crt \
+  --peerAddresses peer0.org2.example.com:9051 \
+  --tlsRootCertFiles /opt/gopath/.../ca.crt \
+  -c '{"function":"CreateAsset","Args":["myId","Owner","500","blue","10"]}'
+
+# Check channel height
+docker exec cli peer channel getinfo -c mychannel
+```
+
+---
+
+## Chaincode API
+
+| Function | Type | Arguments | Description |
+|----------|------|-----------|-------------|
+| `InitLedger` | Write | _(none)_ | Seeds 4 sample assets |
+| `CreateAsset` | Write | `id`, `owner`, `value`, `color`, `size` | Add new asset |
+| `ReadAsset` | Read | `id` | Get one asset |
+| `UpdateAsset` | Write | `id`, `color`, `value`, `size` | Modify asset fields |
+| `DeleteAsset` | Write | `id` | Remove an asset |
+| `TransferAsset` | Write | `id`, `newOwner` | Change ownership |
+| `GetAllAssets` | Read | _(none)_ | List all assets |
+| `AssetExists` | Read | `id` | Check existence |
+
+Reads are fast (single peer). Writes go through both peers (MAJORITY endorsement).
+
+---
+
+## Adding More Full Nodes
+
+### New organisation (Org3)
+
+Edit these files **before** running `generate.sh`:
+
+1. **`network/crypto-config.yaml`** — Add under `PeerOrgs`:
+   ```yaml
+   - Name: Org3
+     Domain: org3.example.com
+     EnableNodeOUs: true
+     Template: { Count: 1 }
+     Users: { Count: 1 }
+   ```
+
+2. **`network/configtx.yaml`** — Add `&Org3` anchor, add to `SampleConsortium` + `ChannelDemo` profile.
+
+3. **`network/docker-compose.yaml`** — Copy-paste a peer service block, rename to `peer0.org3.example.com`, use new ports (e.g. `11051`/`11052`).
+
+4. **`scripts/generate.sh`** — Add an anchor-peer generation line for `org3`.
+
+5. **`scripts/start.sh`** — Add channel-join and anchor-peer-update commands for Org3.
+
+6. **`scripts/deploy-cc.sh`** — Add an install block for the Org3 peer.
+
+7. **`frontend/lib/fabric.js`** — If using invoke from the frontend, add the Org3 peer addresses to the `cliInvoke` command.
+
+### More peers per org
+
+In `crypto-config.yaml`, increase `Template.Count`. In `docker-compose.yaml`, duplicate the peer service with adjusted names and incrementing port numbers.
+
+---
+
+## Adding More Lite Nodes
+
+Lite nodes are just Node.js processes. For each one:
+
+```bash
+cd application
+npm run enroll Org1                       # once per org
+npm run register <unique-username> Org1   # once per lite node
+npm run invoke -- <username> GetAllAssets  # use it!
+```
+
+You can run hundreds of lite nodes concurrently — they all share the same full-node peers.
+
+---
+
+## Useful Commands
+
+```bash
+# Logs
+docker logs peer0.org1.example.com -f
+docker logs orderer.example.com -f
+
+# Enter admin shell
+docker exec -it cli bash
+
+# List installed chaincodes on a peer
+docker exec cli peer lifecycle chaincode queryinstalled
+
+# List committed chaincodes on channel
+docker exec cli peer lifecycle chaincode querycommitted -C mychannel
+
+# Channel info
+docker exec cli peer channel getinfo -c mychannel
+
+# Fetch latest block
+docker exec cli peer channel fetch newest -c mychannel
+
+# Tear down everything
+./scripts/stop.sh --clean
+```
+
+---
+
+## Production Readiness
+
+This project uses `cryptogen` for simplicity. For real deployments:
+
+- **Fabric CA** — Replace `cryptogen` with a proper Certificate Authority for dynamic identity management
+- **RAFT cluster** — Run 3 or 5 orderer nodes (edit `configtx.yaml` + `docker-compose.yaml`)
+- **CouchDB** — Set `CORE_LEDGER_STATE_STATEDATABASE=CouchDB` for rich JSON queries
+- **TLS from real CA** — Use Let's Encrypt or enterprise PKI instead of `cryptogen` certs
+- **Hardware** — 2 GB RAM per peer, 1 GB per orderer (minimum)
+
+---
+
+## License
+
+Apache-2.0

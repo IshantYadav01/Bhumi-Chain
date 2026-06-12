@@ -1,0 +1,20 @@
+{
+  "name": "ndhack-lite-node",
+  "version": "1.0.0",
+  "description": "Hyperledger Fabric lite-node client — connects to full nodes via the Fabric Gateway SDK",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "enroll": "node src/enrollAdmin.js",
+    "register": "node src/registerUser.js",
+    "invoke": "node src/invoke.js",
+    "query": "node src/query.js"
+  },
+  "dependencies": {
+    "fabric-network": "^2.2.20",
+    "fabric-ca-client": "^2.2.20"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
