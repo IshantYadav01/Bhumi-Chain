@@ -135,6 +135,22 @@ peer_cmd "
 "
 echo "  ✔ Chaincode committed to channel"
 
+# ── Auto-initialize the ledger so the frontend works immediately ──
+echo ""
+echo "▶ Initializing ledger with sample assets..."
+peer_cmd "
+    peer chaincode invoke \
+        -o orderer.example.com:7050 \
+        --ordererTLSHostnameOverride orderer.example.com \
+        --tls --cafile ${ORDERER_CA} \
+        --channelID ${CHANNEL} \
+        --name ${CC_NAME} \
+        --peerAddresses peer0.org1.example.com:7051 --tlsRootCertFiles ${PEER_ORG1_TLS} \
+        --peerAddresses peer0.org2.example.com:9051 --tlsRootCertFiles ${PEER_ORG2_TLS} \
+        -c '{\"function\":\"InitLedger\",\"Args\":[]}'
+" 2>&1 | grep -v "^$"
+echo "  ✔ Ledger initialized"
+
 # ── Verify ──────────────────────────────────────────────────────────
 echo ""
 echo "▶ Verifying committed chaincode..."

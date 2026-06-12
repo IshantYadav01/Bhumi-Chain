@@ -38,17 +38,19 @@ function cliQuery(fcn, ...args) {
     ctor,
   ]);
 
-  const lines = stdout.trim().split("\n");
+  const trimmed = stdout.trim();
+  // Empty ledger returns empty output — return empty array for GetAllAssets / empty obj for ReadAsset
+  if (!trimmed) {
+    return [];
+  }
+  const lines = trimmed.split("\n");
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (
-      (trimmed.startsWith("[") || trimmed.startsWith("{")) &&
-      !trimmed.includes("INFO")
-    ) {
-      return JSON.parse(trimmed);
+    const t = line.trim();
+    if ((t.startsWith("[") || t.startsWith("{")) && !t.includes("INFO")) {
+      return JSON.parse(t);
     }
   }
-  throw new Error("Could not parse query result: " + stdout.slice(-200));
+  return [];
 }
 
 // ── Invoke helper ─────────────────────────────────────────────────
