@@ -240,13 +240,26 @@ cd ..
 
 # 11. Seed samples via Go backend (not docker exec CLI)
 log "Seeding sample plots via Go backend..."
-sleep 3
+# Wait for gateway to be ready for transactions (not just health)
+for attempt in $(seq 1 15); do
+    if curl -s -X POST http://localhost:8080/api/land         -H "Content-Type: application/json"         -d '{"action":"register","plotId":"_probe","surveyNumber":"X","owner":"X","area":1}' 2>/dev/null | grep -q "success"; then
+        ok "Gateway ready (attempt $attempt)"
+        break
+    fi
+    sleep 2
+done
 for i in $(seq 1 4); do
     loc="Location${i}"
     prov="Province$(( (i-1) % 3 + 1 ))"
-    curl -s -X POST http://localhost:8080/api/land \
-        -H "Content-Type: application/json" \
-        -d "{\"action\":\"register\",\"plotId\":\"plot-00${i}\",\"surveyNumber\":\"SN-${i}001\",\"owner\":\"Owner${i}\",\"location\":\"${loc}\",\"province\":\"${prov}\",\"area\":$((i*200)),\"landType\":\"residential\"}" | grep -q "success" && ok "  plot-00${i}" || log "  plot-00${i} failed"
+    for retry in $(seq 1 5); do
+        if curl -s -X POST http://localhost:8080/api/land \
+            -H "Content-Type: application/json" \
+            -d "{\"action\":\"register\",\"plotId\":\"plot-00${i}\",\"surveyNumber\":\"SN-${i}001\",\"owner\":\"Owner${i}\",\"location\":\"${loc}\",\"province\":\"${prov}\",\"area\":$((i*200)),\"landType\":\"residential\"}" 2>/dev/null | grep -q "success"; then
+            ok "  plot-00${i}"
+            break
+        fi
+        sleep 2
+    done
 done
 ok "Seeded 4 sample plots via Go backend"
 
