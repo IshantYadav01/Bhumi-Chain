@@ -28,7 +28,7 @@ ok "Cleaned"
 
 # 2. Go deps
 log "Chaincode deps..."
-cd ../backend/chaincode/go/landreg && go mod tidy 2>/dev/null; cd ../../../network
+cd ../backend/chaincode/go/landreg && go mod tidy 2>/dev/null; cd ../../../../network
 
 # 3. cryptogen
 log "Generating MSP certs..."
