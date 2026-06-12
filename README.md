@@ -1,88 +1,75 @@
 # Land Registry — Private Blockchain System
 
-A **Hyperledger Fabric** land registry with **5 department full nodes**, **unlimited lite nodes** (buyers, sellers, officials), mortgage tracking, and legal dispute management.
+A **Hyperledger Fabric** land registry on a private blockchain. **3 provincial governing bodies** run full nodes. **77 malpots**, buyers, sellers, municipalities, and survey departments connect as lite nodes.
 
-Land transfers require **tri-department endorsement** from Municipality, Malpot, and Survey departments.
+Land records track ownership, mortgages, and legal disputes. Transfers require endorsement from **all 3 provincial peers** (100% consensus for test; 75% — 9 of 11 — for production).
 
 ## Architecture
 
 ```
-                         Ordering Service (RAFT)
-                       orderer.example.com:7050
-                                  │
-     ┌──────────┬──────────┬──────┼──────┬──────────┐
-     │          │          │      │      │          │
-  Municipality Malpot   Survey  LandReg  Finance  │
-  (Full Node) (Full N) (Full N)(Full N)(Full N)  │  5 departments
-     │          │          │      │      │        │
-     └──────────┴──────────┼──────┴──────┘        │
-                           │                      │
-              ┌────────────┼────────────┐         │
-              │            │            │         │
-           Buyer        Seller      Officials      │
-         (Lite Node)  (Lite Node)  (Lite Nodes)    │  ← unlimited
-              │            │            │         │
-              └────────────┼────────────┘         │
-                           │                      │
-                    ┌──────▼──────┐               │
-                    │  Next.js UI │               │
-                    │  :3000      │               │
-                    └─────────────┘               │
-                                                  │
-     ... scale to 11 departments by adding 6 more peer orgs
+                    Ordering Service (RAFT)
+                  orderer.example.com:7050
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+     Province 1         Province 2         Province 3     ← 3 full nodes (test)
+     :7051              :8051              :9051          ← scale to 11 for prod
+          │                  │                  │
+          └──────────────────┼──────────────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         │                   │                   │
+       Buyer              Seller           77 Malpots       ← lite nodes
+    (Lite Node)        (Lite Node)       (Lite Nodes)       ← unlimited
+         │                   │                   │
+         └───────────────────┼───────────────────┘
+                             │
+                    ┌────────▼────────┐
+                    │  Next.js UI     │
+                    │  localhost:3000 │
+                    └─────────────────┘
 ```
 
-| Component | What it is | Scale |
-|-----------|-----------|-------|
-| **Full node** | Department peer — holds full ledger, endorses transactions | 5 (scale to 11) |
-| **Lite node** | Buyer, seller, or official — submits transactions via SDK / UI | Unlimited |
-| **Orderer** | RAFT-based ordering service | 1 (dev) / 3–5 (prod) |
-| **Frontend** | Next.js land registry dashboard | 1 browser tab |
+| Layer | Who | Count | Runs |
+|-------|-----|-------|------|
+| **Full node** | Provincial governing body | 3 (test) / 11 (prod) | Docker containers — hold ledger, endorse |
+| **Lite node** | Malpots, buyers, sellers, officials | Unlimited (77 malpots) | Browser / SDK — submit, query, no ledger |
+| **Orderer** | RAFT ordering service | 1 (dev) | Docker container |
 
-**Land transfer flow**: Buyer → Seller → endorsed by **Municipality + Malpot + Survey** (3-of-3 observer endorsement).
-
-Land can be **mortgaged** or in **legal dispute** — both states are recorded on the ledger and visible in the UI.
+**Land states**: `active` → `mortgaged` → `disputed` → `split`. Mortgaged or disputed land **cannot** be transferred.
 
 ---
 
 ## Prerequisites
 
-| Tool | Minimum | Check |
-|------|---------|-------|
+| Tool | Min | Check |
+|------|-----|-------|
 | Docker | 20.10+ | `docker --version` |
 | Docker Compose | 2.0+ | `docker compose version` |
 | Node.js | 18+ | `node --version` |
 | Go | 1.21+ | `go version` |
 
-> You do **not** need Hyperledger Fabric binaries installed. `cryptogen`, `configtxgen`, and `peer` run inside Docker containers.
+> No Fabric binaries needed — everything runs inside Docker.
 
 ---
 
-## Quick Start (5 minutes)
+## Quick Start
 
 ```bash
-# 1. Generate crypto + channel artifacts for 5 department orgs
-./scripts/generate.sh
+# One command: tear down, generate crypto, start 3 peers, deploy chaincode, seed data
+./scripts/rebuild.sh
 
-# 2. Start full nodes (orderer + 5 department peers)
-./scripts/start.sh
-
-# 3. Deploy land registry chaincode + seed 4 sample plots
-./scripts/deploy-cc.sh
-
-# 4. Start the frontend
+# Start the dashboard
 cd frontend && npm install && npm run dev
 ```
 
-Open **http://localhost:3000** — the land registry dashboard.
+Open **http://localhost:3000** — live land registry dashboard.
 
-The network is live with:
+Network endpoints:
 - `orderer.example.com:7050`
-- `peer0.municipality.example.com:7051`
-- `peer0.malpot.example.com:8051`
-- `peer0.survey.example.com:9051`
-- `peer0.landregistry.example.com:10051`
-- `peer0.finance.example.com:11051`
+- `peer0.province1.example.com:7051`
+- `peer0.province2.example.com:8051`
+- `peer0.province3.example.com:9051`
 
 ---
 
@@ -90,171 +77,136 @@ The network is live with:
 
 ```
 ndhack/
-├── network/                          # Fabric network definition
-│   ├── docker-compose.yaml           # Containers: orderer, peers, CLI
-│   ├── crypto-config.yaml            # Org structure → generates MSP certs
-│   ├── configtx.yaml                 # Channel, genesis, consortium config
-│   ├── core.yaml                     # Peer config reference
-│   └── orderer.yaml                  # Orderer config reference
+├── network/
+│   ├── docker-compose.yaml       # orderer + 3 provincial peers + CLI
+│   ├── crypto-config.yaml        # org topology → generates MSP certs
+│   ├── configtx.yaml             # channel, genesis, consortium (auto-generated)
+│   ├── core.yaml                 # peer config reference
+│   └── orderer.yaml              # orderer config reference
 │
-├── chaincode/go/basic/               # Smart contract (Go)
-│   ├── basic.go                      # Asset CRUD + transfer
-│   ├── go.mod                        # Module definition
-│   └── go.sum                        # Dependency checksums
+├── chaincode/go/landreg/
+│   ├── landreg.go                # land registry smart contract
+│   └── go.mod
 │
-├── application/                      # Lite-node SDK client (Node.js)
-│   ├── package.json
-│   └── src/
-│       ├── connect.js                # Connection profile + Fabric SDK helpers
-│       ├── enrollAdmin.js            # Enroll org admin with Fabric CA
-│       ├── registerUser.js           # Register a lite-node user identity
-│       ├── invoke.js                 # Submit transactions from CLI
-│       ├── query.js                  # Read-only ledger queries
-│       ├── app.js                    # Multi-lite-node concurrent demo
-│       └── quick-test.js             # Standalone integration test
-│
-├── frontend/                         # Next.js dashboard (web UI)
-│   ├── package.json
-│   ├── next.config.js
-│   ├── jsconfig.json
-│   ├── lib/fabric.js                 # CLI-based Fabric backend
+├── frontend/                     # Next.js dashboard
+│   ├── lib/fabric.js             # CLI-based Fabric backend
 │   └── app/
-│       ├── layout.js                 # Root layout (dark theme)
-│       ├── page.js                   # Main asset manager UI
-│       └── api/assets/route.js       # REST API (GET + POST)
+│       ├── page.js               # land registry UI
+│       ├── layout.js
+│       └── api/land/route.js     # REST API (GET + POST)
+│
+├── application/                  # lite-node SDK client (unused — reference only)
+│   └── src/                      # connect, enroll, register, invoke, query
 │
 ├── scripts/
-│   ├── generate.sh                   # cryptogen + configtxgen
-│   ├── start.sh                      # docker compose up + channel join
-│   ├── deploy-cc.sh                  # Package → install → approve → commit
-│   └── stop.sh                       # docker compose down (+ optional clean)
+│   ├── rebuild.sh                # ★ one-command full rebuild
+│   ├── generate.sh               # cryptogen + configtxgen
+│   ├── start.sh                  # docker compose up + channel join
+│   ├── deploy-cc.sh              # package → install → approve → commit
+│   └── stop.sh                   # tear down
 │
-├── config/env.sh                     # Tunable variables (org count, etc.)
+├── config/env.sh
 ├── .gitignore
-├── README.md                         # ← you are here
-└── DETAILS.md                        # AI / contributor reference
+├── README.md
+└── DETAILS.md
 ```
 
 ---
 
-## Working with the Frontend
+## Frontend Dashboard
 
-Start it:
-
-```bash
-cd frontend
-npm install
-npm run dev          # → http://localhost:3001
-```
-
-The dashboard shows:
+Start: `cd frontend && npm run dev` → http://localhost:3000
 
 | Feature | How |
 |---------|-----|
-| **Asset table** | Auto-refreshes every 8 seconds |
-| **Create asset** | Fill the form at the bottom, click "Create Asset" |
-| **Update asset** | Click a row → form pre-fills → edit → "Update Asset" |
-| **Transfer** | Enter asset ID + new owner in the Quick Transfer box |
-| **Delete** | Click the red **Del** button on any row |
-| **Init Ledger** | Click "Init Ledger" to seed 4 sample assets |
-| **Status dot** | Green = connected, Red = network down |
+| **Land table** | Auto-refreshes every 8s |
+| **Register land** | Fill form → "Register Land" |
+| **Transfer land** | Plot ID + buyer + price → "Transfer Land" |
+| **Mortgage** | Plot ID + bank + amount + dates |
+| **Dispute** | Plot ID + case number + court |
+| **Status filter** | Tabs: All / Active / Mortgaged / Disputed |
+| **Owner filter** | Search by owner name |
+| **Detail panel** | Click any row → full land details |
 
-The frontend talks to the Fabric network through the `cli` Docker container. No Fabric SDK needed in the browser.
-
----
-
-## CLI: Quick Operations
-
-The admin CLI container is always running. Use it directly:
-
-```bash
-# Query all assets
-docker exec cli peer chaincode query -C mychannel -n basic \
-  -c '{"function":"GetAllAssets","Args":[]}'
-
-# Create an asset (writes need both peers for endorsement)
-docker exec cli peer chaincode invoke \
-  -o orderer.example.com:7050 --tls \
-  --cafile /opt/gopath/.../tlsca.example.com-cert.pem \
-  -C mychannel -n basic \
-  --peerAddresses peer0.org1.example.com:7051 \
-  --tlsRootCertFiles /opt/gopath/.../ca.crt \
-  --peerAddresses peer0.org2.example.com:9051 \
-  --tlsRootCertFiles /opt/gopath/.../ca.crt \
-  -c '{"function":"CreateAsset","Args":["myId","Owner","500","blue","10"]}'
-
-# Check channel height
-docker exec cli peer channel getinfo -c mychannel
-```
+The frontend talks to Fabric via `docker exec cli peer chaincode ...` — no SDK needed in the browser.
 
 ---
 
 ## Chaincode API (landreg)
 
-| Function | Type | Arguments |
-|----------|------|-----------|
-| `RegisterLand` | Write | `plotId`, `surveyNumber`, `owner`, `location`, `area`, `landType` |
-| `TransferLand` | Write | `plotId`, `buyer`, `price` |
-| `SetMortgage` | Write | `plotId`, `bank`, `amount`, `startDate`, `endDate` |
-| `ClearMortgage` | Write | `plotId` |
-| `FileDispute` | Write | `plotId`, `caseNumber`, `court`, `description` |
-| `ResolveDispute` | Write | `plotId` |
-| `QueryLand` | Read | `plotId` |
-| `GetLandByOwner` | Read | `owner` |
-| `GetLandByStatus` | Read | `status` |
-| `GetAllLand` | Read | _(none)_ |
+| Function | Args |
+|----------|------|
+| `RegisterLand` | `plotId, surveyNumber, owner, location, province, area, landType` |
+| `TransferLand` | `plotId, buyer, price` |
+| `SplitLand` | `parentPlotId, childrenJSON` |
+| `SetMortgage` | `plotId, bank, amount, startDate, endDate` |
+| `ClearMortgage` | `plotId` |
+| `FileDispute` | `plotId, caseNumber, court, description` |
+| `ResolveDispute` | `plotId` |
+| `QueryLand` | `plotId` |
+| `GetLandByOwner` | `owner` |
+| `GetLandByStatus` | `status` |
+| `GetLandByProvince` | `province` |
+| `GetChildrenOf` | `parentPlotId` |
+| `GetAllLand` | _(none)_ |
 
-**Endorsement**: `OutOf(3, MunicipalityMSP, MalpotMSP, SurveyMSP)` — land transfers require all 3 observers.
-
-**Land states**: `active` → can be sold | `mortgaged` → blocked until cleared | `disputed` → blocked until resolved
-
----
-
-## Adding More Full Nodes
-
-### New organisation (Org3)
-
-Edit these files **before** running `generate.sh`:
-
-1. **`network/crypto-config.yaml`** — Add under `PeerOrgs`:
-   ```yaml
-   - Name: Org3
-     Domain: org3.example.com
-     EnableNodeOUs: true
-     Template: { Count: 1 }
-     Users: { Count: 1 }
-   ```
-
-2. **`network/configtx.yaml`** — Add `&Org3` anchor, add to `SampleConsortium` + `ChannelDemo` profile.
-
-3. **`network/docker-compose.yaml`** — Copy-paste a peer service block, rename to `peer0.org3.example.com`, use new ports (e.g. `11051`/`11052`).
-
-4. **`scripts/generate.sh`** — Add an anchor-peer generation line for `org3`.
-
-5. **`scripts/start.sh`** — Add channel-join and anchor-peer-update commands for Org3.
-
-6. **`scripts/deploy-cc.sh`** — Add an install block for the Org3 peer.
-
-7. **`frontend/lib/fabric.js`** — If using invoke from the frontend, add the Org3 peer addresses to the `cliInvoke` command.
-
-### More peers per org
-
-In `crypto-config.yaml`, increase `Template.Count`. In `docker-compose.yaml`, duplicate the peer service with adjusted names and incrementing port numbers.
+**Endorsement**: `OutOf(3, Province1MSP.peer, Province2MSP.peer, Province3MSP.peer)` — all 3 provinces.
 
 ---
 
-## Adding More Lite Nodes
-
-Lite nodes are just Node.js processes. For each one:
+## CLI Reference
 
 ```bash
-cd application
-npm run enroll Org1                       # once per org
-npm run register <unique-username> Org1   # once per lite node
-npm run invoke -- <username> GetAllAssets  # use it!
+# Build peer args helper
+ORDERER_CA="/opt/gopath/.../tlsca.example.com-cert.pem"
+PA=""
+for i in 1 2 3; do
+    o="province${i}"; p=$((7051+(i-1)*1000))
+    PA="${PA} --peerAddresses peer0.${o}.example.com:${p} --tlsRootCertFiles /opt/gopath/.../peerOrganizations/${o}.example.com/peers/peer0.${o}.example.com/tls/ca.crt"
+done
+
+# Query all land
+docker exec cli peer chaincode query -C mychannel -n landreg -c '{"function":"GetAllLand","Args":[]}'
+
+# Register
+docker exec cli peer chaincode invoke -o orderer.example.com:7050 --tls --cafile ${ORDERER_CA} -C mychannel -n landreg ${PA} \
+  -c '{"function":"RegisterLand","Args":["plot-001","SN-1001","Ram","Kathmandu","Province3","500.0","residential"]}'
+
+# Transfer (Rs. 75 lakh)
+docker exec cli peer chaincode invoke ... ${PA} \
+  -c '{"function":"TransferLand","Args":["plot-001","Hari","7500000.0"]}'
+
+# Mortgage
+docker exec cli peer chaincode invoke ... ${PA} \
+  -c '{"function":"SetMortgage","Args":["plot-002","Nepal Bank","2000000.0","2026-01-01","2031-01-01"]}'
+
+# Dispute
+docker exec cli peer chaincode invoke ... ${PA} \
+  -c '{"function":"FileDispute","Args":["plot-001","CASE-001","Supreme Court","Boundary dispute"]}'
+
+# Split land
+docker exec cli peer chaincode invoke ... ${PA} \
+  -c '{"function":"SplitLand","Args":["plot-001","[{\"plotId\":\"plot-001a\",\"owner\":\"Ram\",\"area\":200},{\"plotId\":\"plot-001b\",\"owner\":\"Hari\",\"area\":300}]"]}'
+
+# Useful queries
+docker exec cli peer channel getinfo -c mychannel
+docker exec cli peer lifecycle chaincode querycommitted -C mychannel
+docker logs peer0.province1.example.com -f
 ```
 
-You can run hundreds of lite nodes concurrently — they all share the same full-node peers.
+---
+
+## Scaling to Production (11 full nodes)
+
+Change `3` → `11` in these files:
+
+| File | Line / variable |
+|------|----------------|
+| `network/crypto-config.yaml` | Add Province4–Province11 |
+| `scripts/rebuild.sh` | `seq 1 3` → `seq 1 11` |
+| `frontend/lib/fabric.js` | `i <= 3` → `i <= 11` |
+
+Endorsement: change `OutOf(3, ...)` → `OutOf(9, ...)` for 75% approval.
 
 ---
 
@@ -262,41 +214,31 @@ You can run hundreds of lite nodes concurrently — they all share the same full
 
 ```bash
 # Logs
-docker logs peer0.org1.example.com -f
+docker logs peer0.province1.example.com -f
 docker logs orderer.example.com -f
 
-# Enter admin shell
+# Admin shell
 docker exec -it cli bash
 
-# List installed chaincodes on a peer
-docker exec cli peer lifecycle chaincode queryinstalled
-
-# List committed chaincodes on channel
+# List committed chaincodes
 docker exec cli peer lifecycle chaincode querycommitted -C mychannel
 
 # Channel info
 docker exec cli peer channel getinfo -c mychannel
 
-# Fetch latest block
-docker exec cli peer channel fetch newest -c mychannel
-
-# Tear down everything
+# Tear down
 ./scripts/stop.sh --clean
 ```
 
 ---
 
-## Production Readiness
+## Production Notes
 
-This project uses `cryptogen` for simplicity. For real deployments:
-
-- **Fabric CA** — Replace `cryptogen` with a proper Certificate Authority for dynamic identity management
-- **RAFT cluster** — Run 3 or 5 orderer nodes (edit `configtx.yaml` + `docker-compose.yaml`)
-- **CouchDB** — Set `CORE_LEDGER_STATE_STATEDATABASE=CouchDB` for rich JSON queries
-- **TLS from real CA** — Use Let's Encrypt or enterprise PKI instead of `cryptogen` certs
+- **Fabric CA** — replace `cryptogen` with a real CA for dynamic identity management
+- **RAFT cluster** — run 3–5 orderers for fault tolerance
+- **CouchDB** — swap `goleveldb` → `CouchDB` for rich queries
+- **Real TLS** — use enterprise PKI instead of `cryptogen` certs
 - **Hardware** — 2 GB RAM per peer, 1 GB per orderer (minimum)
-
----
 
 ## License
 
