@@ -18,6 +18,15 @@ import (
 	"github.com/ndhack/backend/models"
 )
 
+// BlockchainReceipt standardizes verification metadata returned by Fabric execution engine.
+type BlockchainReceipt struct {
+	Success       bool   `json:"success"`
+	TransactionID string `json:"txId"`
+	Verified      bool   `json:"verified"`
+	Lifecycle     string `json:"lifecycle"`
+	Payload       string `json:"payload,omitempty"`
+}
+
 type LandHandler struct {
 	pool   *fabric.Pool
 	defOrg string
