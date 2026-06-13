@@ -12,7 +12,6 @@ vendor/
 
 # ── Go backend artifacts ────────────────────────────────────────────
 backend/server
-backend/go.sum
 backend/backend.log
 
 # ── Fabric generated artifacts ──────────────────────────────────────
