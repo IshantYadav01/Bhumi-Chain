@@ -26,12 +26,26 @@ func NewLandHandler(pool *fabric.Pool, defOrg string) *LandHandler {
 
 func (h *LandHandler) getClient(c *gin.Context) (*fabric.Client, string) {
 	nid, _ := c.Get("msp_nid")
+	role, _ := c.Get("msp_role")
 	callerID, _ := nid.(string)
-	client, err := h.pool.Get(h.defOrg, "Admin")
+	mspUser := "Admin"
+	if r, ok := role.(string); ok && r != "admin" {
+		mspUser = "User1"
+	}
+	client, err := h.pool.Get(h.defOrg, mspUser)
 	if err != nil {
 		return nil, callerID
 	}
 	return client, callerID
+}
+
+// submitFresh uses the cached client for Submit — avoids peer connection limits.
+func (h *LandHandler) submitFresh(c *gin.Context, fcn string, args ...string) ([]byte, error) {
+	cli, _ := h.getClient(c)
+	if cli == nil {
+		return nil, fmt.Errorf("backend not ready")
+	}
+	return cli.Submit(fcn, args...)
 }
 
 // ── GET ─────────────────────────────────────────────────────────────
@@ -119,9 +133,22 @@ func (h *LandHandler) PostAction(c *gin.Context) {
 	}
 }
 
+// assertAdmin checks the JWT role before allowing admin actions.
+func assertAdmin(c *gin.Context) bool {
+	role, _ := c.Get("msp_role")
+	if r, ok := role.(string); ok && r == "admin" {
+		return true
+	}
+	c.JSON(http.StatusForbidden, models.APIResponse{Error: "admin access required"})
+	return false
+}
+
 // ── Admin ───────────────────────────────────────────────────────────
 
 func (h *LandHandler) handleRegister(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
+	if !assertAdmin(c) {
+		return
+	}
 	if req.PlotID == "" || req.Owner == "" {
 		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "plotId + owner required"})
 		return
@@ -155,7 +182,7 @@ func (h *LandHandler) handleListForSale(cli *fabric.Client, cid string, c *gin.C
 		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "landId required"})
 		return
 	}
-	_, err := cli.Submit("ListForSale", cid, req.LandID,
+	_, err := h.submitFresh(c, "ListForSale", cid, req.LandID,
 		strconv.FormatFloat(req.Price, 'f', -1, 64))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
@@ -169,7 +196,7 @@ func (h *LandHandler) handleCancelListing(cli *fabric.Client, cid string, c *gin
 		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "landId required"})
 		return
 	}
-	_, err := cli.Submit("CancelListing", cid, req.LandID)
+	_, err := h.submitFresh(c, "CancelListing", cid, req.LandID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return
@@ -182,7 +209,7 @@ func (h *LandHandler) handleMakeOffer(cli *fabric.Client, cid string, c *gin.Con
 		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "landId + offeredPrice required"})
 		return
 	}
-	raw, err := cli.Submit("MakeOffer", cid, req.LandID,
+	raw, err := h.submitFresh(c, "MakeOffer", cid, req.LandID,
 		strconv.FormatFloat(req.OfferedPrice, 'f', -1, 64))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
@@ -196,7 +223,7 @@ func (h *LandHandler) handleAcceptOffer(cli *fabric.Client, cid string, c *gin.C
 		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "offerId required"})
 		return
 	}
-	_, err := cli.Submit("AcceptOffer", cid, req.OfferID)
+	_, err := h.submitFresh(c, "AcceptOffer", cid, req.OfferID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return
@@ -209,7 +236,7 @@ func (h *LandHandler) handleConfirmTransaction(cli *fabric.Client, cid string, c
 		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "txId required"})
 		return
 	}
-	_, err := cli.Submit("ConfirmTransaction", cid, req.TxID)
+	_, err := h.submitFresh(c, "ConfirmTransaction", cid, req.TxID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return
@@ -222,7 +249,7 @@ func (h *LandHandler) handleRejectTransaction(cli *fabric.Client, cid string, c 
 		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "txId required"})
 		return
 	}
-	_, err := cli.Submit("RejectTransaction", cid, req.TxID)
+	_, err := h.submitFresh(c, "RejectTransaction", cid, req.TxID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return

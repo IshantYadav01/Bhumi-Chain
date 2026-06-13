@@ -227,8 +227,8 @@ func (s *SmartContract) MakeOffer(
 	}
 	existing, _ := s.findOffers(ctx, landID, caller)
 	for _, o := range existing {
-		if o.Status == "pending" {
-			return "", fmt.Errorf("you already have a pending offer")
+		if o.Buyer == caller && o.Status == "pending" {
+			return "", fmt.Errorf("you already have a pending offer on this land")
 		}
 	}
 	offer := &BuyerOffer{

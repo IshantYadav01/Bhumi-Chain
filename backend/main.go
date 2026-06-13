@@ -152,6 +152,7 @@ func jwtMiddleware() gin.HandlerFunc {
 			return
 		}
 		c.Set("msp_nid", claims.NID)
+		c.Set("msp_role", claims.Role)
 		c.Next()
 	}
 }

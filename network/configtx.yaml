@@ -30,6 +30,17 @@ Application: &ApplicationDefaults
     LifecycleEndorsement: { Type: ImplicitMeta, Rule: "MAJORITY Endorsement" }
     Endorsement: { Type: Signature, Rule: "OR('LandregMSP.peer')" }
   Capabilities: *ApplicationCapabilities
+  ACLs:
+    _lifecycle/CheckCommitReadiness: /Channel/Application/Writers
+    lscc/ChaincodeExists: /Channel/Application/Readers
+    lscc/GetDeploymentSpec: /Channel/Application/Readers
+    lscc/GetChaincodeData: /Channel/Application/Readers
+    qscc/GetChainInfo: /Channel/Application/Readers
+    qscc/GetBlockByNumber: /Channel/Application/Readers
+    qscc/GetTransactionByID: /Channel/Application/Readers
+    cscc/GetConfigBlock: /Channel/Application/Readers
+    peer/Propose: /Channel/Application/Writers
+    peer/ChaincodeToChaincode: /Channel/Application/Writers
 Orderer: &OrdererDefaults
   OrdererType: etcdraft
   EtcdRaft:

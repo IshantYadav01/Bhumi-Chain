@@ -61,6 +61,7 @@ export default function Home() {
   const [offersForLand, setOffersForLand] = useState([]);
   const [sel, setSel] = useState(null);
   const [explorer, setExplorer] = useState(null);
+  const [offerPrices, setOfferPrices] = useState({});
 
   // Form
   const [f, setF] = useState({
@@ -112,7 +113,7 @@ export default function Home() {
         }
         const data = await res.json();
         setConnected(true);
-        return Array.isArray(data) ? data : [];
+        return data;
       } catch (e) {
         setConnected(false);
         t(e.message, false);
@@ -159,26 +160,25 @@ export default function Home() {
   );
 
   const fl = useCallback(async () => {
-    // Admin sees all lands, customers see only their own
     const url = admin ? "/api/land" : "/api/land?action=my-lands";
     const d = await apiGet(url);
-    if (d !== null) setLands(d);
+    if (d !== null) setLands(Array.isArray(d) ? d : []);
   }, [apiGet, admin]);
   const fls = useCallback(async () => {
     const d = await apiGet("/api/land?action=listings");
-    if (d !== null) setListings(d);
+    if (d !== null) setListings(Array.isArray(d) ? d : []);
   }, [apiGet]);
   const fo = useCallback(async () => {
     const d = await apiGet("/api/land?action=my-offers");
-    if (d !== null) setOffers(d);
+    if (d !== null) setOffers(Array.isArray(d) ? d : []);
   }, [apiGet]);
   const ft = useCallback(async () => {
     const d = await apiGet("/api/land?action=my-transactions");
-    if (d !== null) setTxs(d);
+    if (d !== null) setTxs(Array.isArray(d) ? d : []);
   }, [apiGet]);
   const fpt = useCallback(async () => {
     const d = await apiGet("/api/land?action=pending-transactions");
-    if (d !== null) setPendingTxs(d);
+    if (d !== null) setPendingTxs(Array.isArray(d) ? d : []);
   }, [apiGet]);
 
   const fe = useCallback(async () => {
@@ -503,6 +503,7 @@ export default function Home() {
                     <tbody>
                       {listings.map((l) => {
                         const isOwner = l.seller === u?.nid;
+                        const myPrice = offerPrices[l.landId] || "";
                         return (
                           <tr key={l.id}>
                             <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
@@ -519,34 +520,36 @@ export default function Home() {
                             </td>
                             <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
                               {!isOwner && l.status === "active" && (
-                                <button
-                                  className={`${btn} ${btnSuc} ${btnSm}`}
-                                  onClick={() => {
-                                    setF({ ...f, landId: l.landId });
-                                    act(
-                                      "make-offer",
-                                      {
-                                        landId: l.landId,
-                                        offeredPrice:
-                                          parseFloat(f.offeredPrice) || l.price,
-                                      },
-                                      "o",
-                                    );
-                                  }}
-                                >
-                                  Make Offer
-                                </button>
-                              )}
-                              {!isOwner && (
-                                <input
-                                  className={`${inp} inline-block w-24 ml-2`}
-                                  placeholder="Price"
-                                  type="number"
-                                  value={f.offeredPrice}
-                                  onChange={(e) =>
-                                    setF({ ...f, offeredPrice: e.target.value })
-                                  }
-                                />
+                                <div className="flex gap-1 items-center">
+                                  <input
+                                    className={`${inp} w-20`}
+                                    placeholder="Price"
+                                    type="number"
+                                    value={myPrice}
+                                    onChange={(e) =>
+                                      setOfferPrices({
+                                        ...offerPrices,
+                                        [l.landId]: e.target.value,
+                                      })
+                                    }
+                                  />
+                                  <button
+                                    className={`${btn} ${btnSuc} ${btnSm}`}
+                                    onClick={() =>
+                                      act(
+                                        "make-offer",
+                                        {
+                                          landId: l.landId,
+                                          offeredPrice:
+                                            parseFloat(myPrice) || l.price,
+                                        },
+                                        "o",
+                                      )
+                                    }
+                                  >
+                                    Bid
+                                  </button>
+                                </div>
                               )}
                               {isOwner && l.status === "active" && (
                                 <button

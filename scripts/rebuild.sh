@@ -74,7 +74,7 @@ peer_at 0 channel update -o orderer.landreg.com:7050 -c mychannel --ordererTLSHo
 ok "Anchors updated"
 
 log "Deploying chaincode..."
-CC="landreg"; CV="3.0"; CS=1; CL="${CC}_${CV}"
+CC="landreg"; CV="4.0"; CS=1; CL="${CC}_${CV}"
 docker exec cli peer lifecycle chaincode package ${CC}.tar.gz \
     --path /opt/gopath/src/github.com/hyperledger/fabric/peer/chaincode/go/landreg --lang golang --label ${CL} 2>&1 | tail -1
 

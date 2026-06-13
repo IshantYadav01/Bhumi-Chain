@@ -15,7 +15,8 @@ import (
 
 // Claims are embedded in every JWT.
 type Claims struct {
-	NID string `json:"nid"`
+	NID  string `json:"nid"`
+	Role string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -108,7 +109,8 @@ func Authenticate(nid, password string) (token string, info *UserInfo, err error
 		return "", nil, fmt.Errorf("invalid credentials")
 	}
 	claims := Claims{
-		NID: nid,
+		NID:  nid,
+		Role: role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(12 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

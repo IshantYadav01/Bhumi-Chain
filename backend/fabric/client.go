@@ -1,6 +1,7 @@
 package fabric
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -157,6 +158,38 @@ func (c *Client) Evaluate(fcn string, args ...string) ([]byte, error) {
 // Submit submits a chaincode invocation.
 func (c *Client) Submit(fcn string, args ...string) ([]byte, error) {
 	return c.contract.SubmitTransaction(fcn, args...)
+}
+
+// SubmitFresh creates a completely new gateway connection for each Submit.
+func (p *Pool) SubmitFresh(org, user string, fcn string, args ...string) ([]byte, error) {
+	id, err := LoadIdentity(p.cfg.CryptoBase, p.cfg.Domain, user)
+	if err != nil {
+		return nil, fmt.Errorf("pool: load identity: %w", err)
+	}
+	tlsCfg, err := loadTLS(p.cfg.PeerTLSCACert, p.cfg.SkipVerify)
+	if err != nil {
+		return nil, err
+	}
+	creds := credentials.NewTLS(tlsCfg)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, p.cfg.PeerAddress,
+		grpc.WithTransportCredentials(creds), grpc.WithBlock())
+	if err != nil {
+		return nil, fmt.Errorf("grpc dial: %w", err)
+	}
+	defer conn.Close()
+	gw, err := client.Connect(id.ID, client.WithSign(id.Sign),
+		client.WithClientConnection(conn),
+		client.WithEvaluateTimeout(30*time.Second),
+		client.WithEndorseTimeout(60*time.Second),
+		client.WithSubmitTimeout(60*time.Second))
+	if err != nil {
+		return nil, fmt.Errorf("gateway connect: %w", err)
+	}
+	defer gw.Close()
+	contract := gw.GetNetwork(p.cfg.ChannelID).GetContract(p.cfg.ChaincodeName)
+	return contract.SubmitTransaction(fcn, args...)
 }
 
 // EvaluateQSCC evaluates a query on the QSCC system chaincode (block explorer).
