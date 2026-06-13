@@ -82,6 +82,11 @@ type ActionRequest struct {
 	CaseNumber  string `json:"caseNumber"`
 	Court       string `json:"court"`
 	Description string `json:"description"`
+
+	// User management
+	UserID    string `json:"userId"`
+	UserName  string `json:"name"`
+	UserRoles string `json:"roles"` // JSON array string, e.g. '["seller","buyer"]'
 }
 
 // ── Response envelope ────────────────────────────────────────────────

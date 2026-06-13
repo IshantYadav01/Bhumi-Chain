@@ -1,6 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import {
+  getToken,
+  clearToken,
+  authHeaders,
+  getUserInfo,
+  hasRole,
+  hasAnyRole,
+  getRoles,
+} from "@/lib/auth.js";
 
 // ── Styles ──────────────────────────────────────────────────────────
 const S = {
@@ -155,6 +165,7 @@ function statusBadge(status) {
 
 // ── Main Page ───────────────────────────────────────────────────────
 export default function Home() {
+  const router = useRouter();
   const [lands, setLands] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -163,6 +174,25 @@ export default function Home() {
   const [networkStatus, setNetworkStatus] = useState("checking");
   const [tab, setTab] = useState("all"); // all | active | mortgaged | disputed
   const [filterOwner, setFilterOwner] = useState("");
+  const [userInfo, setUserInfo] = useState(null);
+  const [sales, setSales] = useState([]);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [salesLoading, setSalesLoading] = useState(false);
+
+  // Redirect to login if no token.
+  useEffect(() => {
+    if (!getToken()) router.replace("/login");
+  }, [router]);
+
+  useEffect(() => {
+    const info = getUserInfo();
+    if (info) setUserInfo(info);
+  }, []);
+
+  const handleLogout = () => {
+    clearToken();
+    router.replace("/login");
+  };
 
   const [form, setForm] = useState({
     action: "register",
@@ -214,7 +244,12 @@ export default function Home() {
       let url = "/api/land";
       if (tab !== "all") url += `?status=${tab}`;
       else if (filterOwner) url += `?owner=${encodeURIComponent(filterOwner)}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: authHeaders() });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
       if (!res.ok) throw new Error("API error");
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -227,7 +262,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [tab, filterOwner]);
+  }, [tab, filterOwner, router]);
 
   useEffect(() => {
     fetchLands();
@@ -235,13 +270,22 @@ export default function Home() {
     return () => clearInterval(i);
   }, [fetchLands]);
 
+  useEffect(() => {
+    if (tab === "sales") fetchSales();
+  }, [tab]);
+
   const doAction = async (action, body = {}) => {
     try {
       const res = await fetch("/api/land", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ action, ...body }),
       });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return false;
+      }
       const data = await res.json();
       if (data.error) {
         showToast(data.error, false);
@@ -254,6 +298,32 @@ export default function Home() {
       showToast(err.message, false);
       return false;
     }
+  };
+
+  const fetchSales = async () => {
+    try {
+      setSalesLoading(true);
+      const [myRes, pendingRes] = await Promise.all([
+        fetch("/api/land?mySales=1", { headers: authHeaders() }),
+        fetch("/api/land?pendingApprovals=1", { headers: authHeaders() }),
+      ]);
+      if (myRes.ok) {
+        const d = await myRes.json();
+        setSales(Array.isArray(d) ? d : []);
+      }
+      if (pendingRes.ok) {
+        const d = await pendingRes.json();
+        setPendingApprovals(Array.isArray(d) ? d : []);
+      }
+    } catch {
+    } finally {
+      setSalesLoading(false);
+    }
+  };
+
+  const handleSaleAction = async (action, proposalId, extra = {}) => {
+    const ok = await doAction(action, { plotId: proposalId, ...extra });
+    if (ok) fetchSales();
   };
 
   const selectLand = (land) => {
@@ -290,7 +360,66 @@ export default function Home() {
           <span style={{ color: "#555", marginLeft: 8 }}>
             {lands.length} plots
           </span>
+          <button
+            onClick={handleLogout}
+            style={{
+              marginLeft: 16,
+              padding: "6px 14px",
+              borderRadius: 6,
+              border: "1px solid #555",
+              background: "transparent",
+              color: "#aaa",
+              cursor: "pointer",
+              fontSize: 12,
+            }}
+          >
+            Logout
+          </button>
         </div>
+        {userInfo && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginLeft: 16,
+            }}
+          >
+            <span style={{ color: "#aaa", fontSize: 12 }}>
+              {userInfo.name || userInfo.username}
+            </span>
+            {userInfo.roles?.map((r) => (
+              <span
+                key={r}
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                  fontSize: 10,
+                  background:
+                    r === "admin"
+                      ? "#7c3aed"
+                      : r === "malpot"
+                        ? "#0891b2"
+                        : r === "official"
+                          ? "#2563eb"
+                          : r === "seller"
+                            ? "#ea580c"
+                            : r === "buyer"
+                              ? "#16a34a"
+                              : r === "bank"
+                                ? "#dc2626"
+                                : r === "court"
+                                  ? "#9333ea"
+                                  : "#6b7280",
+                  color: "#fff",
+                  fontWeight: 600,
+                }}
+              >
+                {r}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -332,6 +461,16 @@ export default function Home() {
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
+          <button
+            style={
+              tab === "sales"
+                ? { ...S.tab(true), background: "#4caf50", color: "#fff" }
+                : S.tab(false)
+            }
+            onClick={() => setTab("sales")}
+          >
+            Sales
+          </button>
         </div>
         <input
           style={{ ...S.input, width: 200 }}
@@ -450,238 +589,250 @@ export default function Home() {
       {/* Action Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         {/* Register Land */}
-        <div style={S.formCard}>
-          <div style={S.formTitle}>Register New Land</div>
-          <div style={S.inputGrid}>
-            <input
-              style={S.input}
-              placeholder="Plot ID *"
-              value={form.plotId}
-              onChange={(e) => setForm({ ...form, plotId: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="Survey Number"
-              value={form.surveyNumber}
-              onChange={(e) =>
-                setForm({ ...form, surveyNumber: e.target.value })
+        {hasAnyRole("admin", "malpot", "official") && (
+          <div style={S.formCard}>
+            <div style={S.formTitle}>Register New Land</div>
+            <div style={S.inputGrid}>
+              <input
+                style={S.input}
+                placeholder="Plot ID *"
+                value={form.plotId}
+                onChange={(e) => setForm({ ...form, plotId: e.target.value })}
+              />
+              <input
+                style={S.input}
+                placeholder="Survey Number"
+                value={form.surveyNumber}
+                onChange={(e) =>
+                  setForm({ ...form, surveyNumber: e.target.value })
+                }
+              />
+              <input
+                style={S.input}
+                placeholder="Owner *"
+                value={form.owner}
+                onChange={(e) => setForm({ ...form, owner: e.target.value })}
+              />
+              <input
+                style={S.input}
+                placeholder="Location"
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+              />
+              <input
+                style={S.input}
+                placeholder="Area (m²)"
+                type="number"
+                value={form.area}
+                onChange={(e) => setForm({ ...form, area: e.target.value })}
+              />
+              <select
+                style={S.select}
+                value={form.landType}
+                onChange={(e) => setForm({ ...form, landType: e.target.value })}
+              >
+                <option value="residential">Residential</option>
+                <option value="commercial">Commercial</option>
+                <option value="agricultural">Agricultural</option>
+                <option value="industrial">Industrial</option>
+              </select>
+            </div>
+            <button
+              style={{ ...S.btn, ...S.btnPrimary }}
+              disabled={!form.plotId || !form.owner}
+              onClick={() =>
+                doAction("register", {
+                  plotId: form.plotId,
+                  surveyNumber: form.surveyNumber,
+                  owner: form.owner,
+                  location: form.location,
+                  area: parseFloat(form.area) || 0,
+                  landType: form.landType,
+                }).then((ok) => ok && clearForm())
               }
-            />
-            <input
-              style={S.input}
-              placeholder="Owner *"
-              value={form.owner}
-              onChange={(e) => setForm({ ...form, owner: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="Location"
-              value={form.location}
-              onChange={(e) => setForm({ ...form, location: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="Area (m²)"
-              type="number"
-              value={form.area}
-              onChange={(e) => setForm({ ...form, area: e.target.value })}
-            />
-            <select
-              style={S.select}
-              value={form.landType}
-              onChange={(e) => setForm({ ...form, landType: e.target.value })}
             >
-              <option value="residential">Residential</option>
-              <option value="commercial">Commercial</option>
-              <option value="agricultural">Agricultural</option>
-              <option value="industrial">Industrial</option>
-            </select>
+              Register Land
+            </button>
           </div>
-          <button
-            style={{ ...S.btn, ...S.btnPrimary }}
-            disabled={!form.plotId || !form.owner}
-            onClick={() =>
-              doAction("register", {
-                plotId: form.plotId,
-                surveyNumber: form.surveyNumber,
-                owner: form.owner,
-                location: form.location,
-                area: parseFloat(form.area) || 0,
-                landType: form.landType,
-              }).then((ok) => ok && clearForm())
-            }
-          >
-            Register Land
-          </button>
-        </div>
+        )}
 
         {/* Transfer Land */}
-        <div style={S.formCard}>
-          <div style={S.formTitle}>Transfer Land (Sale)</div>
-          <p style={{ fontSize: 12, color: "#777", marginBottom: 10 }}>
-            Endorsed by Municipality · Malpot · Survey
-          </p>
-          <div style={S.inputGrid}>
-            <input
-              style={S.input}
-              placeholder="Plot ID *"
-              value={form.plotId}
-              onChange={(e) => setForm({ ...form, plotId: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="Buyer *"
-              value={form.buyer}
-              onChange={(e) => setForm({ ...form, buyer: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="Price (Rs.)"
-              type="number"
-              value={form.price}
-              onChange={(e) => setForm({ ...form, price: e.target.value })}
-            />
+        {hasRole("seller") && (
+          <div style={S.formCard}>
+            <div style={S.formTitle}>Transfer Land (Sale)</div>
+            <p style={{ fontSize: 12, color: "#777", marginBottom: 10 }}>
+              Endorsed by Municipality · Malpot · Survey
+            </p>
+            <div style={S.inputGrid}>
+              <input
+                style={S.input}
+                placeholder="Plot ID *"
+                value={form.plotId}
+                onChange={(e) => setForm({ ...form, plotId: e.target.value })}
+              />
+              <input
+                style={S.input}
+                placeholder="Buyer *"
+                value={form.buyer}
+                onChange={(e) => setForm({ ...form, buyer: e.target.value })}
+              />
+              <input
+                style={S.input}
+                placeholder="Price (Rs.)"
+                type="number"
+                value={form.price}
+                onChange={(e) => setForm({ ...form, price: e.target.value })}
+              />
+            </div>
+            <button
+              style={{ ...S.btn, ...S.btnOutline }}
+              disabled={!form.plotId || !form.buyer}
+              onClick={() =>
+                doAction("transfer", {
+                  plotId: form.plotId,
+                  buyer: form.buyer,
+                  price: parseFloat(form.price) || 0,
+                }).then((ok) => ok && clearForm())
+              }
+            >
+              Transfer Land
+            </button>
           </div>
-          <button
-            style={{ ...S.btn, ...S.btnOutline }}
-            disabled={!form.plotId || !form.buyer}
-            onClick={() =>
-              doAction("transfer", {
-                plotId: form.plotId,
-                buyer: form.buyer,
-                price: parseFloat(form.price) || 0,
-              }).then((ok) => ok && clearForm())
-            }
-          >
-            Transfer Land
-          </button>
-        </div>
+        )}
 
         {/* Mortgage */}
-        <div style={S.formCard}>
-          <div style={S.formTitle}>Set Mortgage</div>
-          <div style={S.inputGrid}>
-            <input
-              style={S.input}
-              placeholder="Plot ID *"
-              value={form.plotId}
-              onChange={(e) => setForm({ ...form, plotId: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="Bank *"
-              value={form.bank}
-              onChange={(e) => setForm({ ...form, bank: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="Amount (Rs.)"
-              type="number"
-              value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="Start Date"
-              value={form.startDate}
-              onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="End Date"
-              value={form.endDate}
-              onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-            />
+        {hasAnyRole("admin", "bank") && (
+          <div style={S.formCard}>
+            <div style={S.formTitle}>Set Mortgage</div>
+            <div style={S.inputGrid}>
+              <input
+                style={S.input}
+                placeholder="Plot ID *"
+                value={form.plotId}
+                onChange={(e) => setForm({ ...form, plotId: e.target.value })}
+              />
+              <input
+                style={S.input}
+                placeholder="Bank *"
+                value={form.bank}
+                onChange={(e) => setForm({ ...form, bank: e.target.value })}
+              />
+              <input
+                style={S.input}
+                placeholder="Amount (Rs.)"
+                type="number"
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              />
+              <input
+                style={S.input}
+                placeholder="Start Date"
+                value={form.startDate}
+                onChange={(e) =>
+                  setForm({ ...form, startDate: e.target.value })
+                }
+              />
+              <input
+                style={S.input}
+                placeholder="End Date"
+                value={form.endDate}
+                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                style={{ ...S.btn, ...S.btnWarning }}
+                disabled={!form.plotId || !form.bank}
+                onClick={() =>
+                  doAction("mortgage", {
+                    plotId: form.plotId,
+                    bank: form.bank,
+                    amount: parseFloat(form.amount) || 0,
+                    startDate: form.startDate,
+                    endDate: form.endDate,
+                  }).then((ok) => ok && clearForm())
+                }
+              >
+                Set Mortgage
+              </button>
+              <button
+                style={{ ...S.btn, ...S.btnOutline, ...S.btnSmall }}
+                disabled={!form.plotId}
+                onClick={() =>
+                  doAction("clear-mortgage", { plotId: form.plotId }).then(
+                    (ok) => ok && clearForm(),
+                  )
+                }
+              >
+                Clear Mortgage
+              </button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              style={{ ...S.btn, ...S.btnWarning }}
-              disabled={!form.plotId || !form.bank}
-              onClick={() =>
-                doAction("mortgage", {
-                  plotId: form.plotId,
-                  bank: form.bank,
-                  amount: parseFloat(form.amount) || 0,
-                  startDate: form.startDate,
-                  endDate: form.endDate,
-                }).then((ok) => ok && clearForm())
-              }
-            >
-              Set Mortgage
-            </button>
-            <button
-              style={{ ...S.btn, ...S.btnOutline, ...S.btnSmall }}
-              disabled={!form.plotId}
-              onClick={() =>
-                doAction("clear-mortgage", { plotId: form.plotId }).then(
-                  (ok) => ok && clearForm(),
-                )
-              }
-            >
-              Clear Mortgage
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* Dispute */}
-        <div style={S.formCard}>
-          <div style={S.formTitle}>File Legal Dispute</div>
-          <div style={S.inputGrid}>
-            <input
-              style={S.input}
-              placeholder="Plot ID *"
-              value={form.plotId}
-              onChange={(e) => setForm({ ...form, plotId: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="Case Number *"
-              value={form.caseNumber}
-              onChange={(e) => setForm({ ...form, caseNumber: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="Court"
-              value={form.court}
-              onChange={(e) => setForm({ ...form, court: e.target.value })}
-            />
-            <input
-              style={S.input}
-              placeholder="Description"
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-            />
+        {hasAnyRole("admin", "court") && (
+          <div style={S.formCard}>
+            <div style={S.formTitle}>File Legal Dispute</div>
+            <div style={S.inputGrid}>
+              <input
+                style={S.input}
+                placeholder="Plot ID *"
+                value={form.plotId}
+                onChange={(e) => setForm({ ...form, plotId: e.target.value })}
+              />
+              <input
+                style={S.input}
+                placeholder="Case Number *"
+                value={form.caseNumber}
+                onChange={(e) =>
+                  setForm({ ...form, caseNumber: e.target.value })
+                }
+              />
+              <input
+                style={S.input}
+                placeholder="Court"
+                value={form.court}
+                onChange={(e) => setForm({ ...form, court: e.target.value })}
+              />
+              <input
+                style={S.input}
+                placeholder="Description"
+                value={form.description}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                style={{ ...S.btn, ...S.btnDanger }}
+                disabled={!form.plotId || !form.caseNumber}
+                onClick={() =>
+                  doAction("dispute", {
+                    plotId: form.plotId,
+                    caseNumber: form.caseNumber,
+                    court: form.court,
+                    description: form.description,
+                  }).then((ok) => ok && clearForm())
+                }
+              >
+                File Dispute
+              </button>
+              <button
+                style={{ ...S.btn, ...S.btnOutline, ...S.btnSmall }}
+                disabled={!form.plotId}
+                onClick={() =>
+                  doAction("resolve-dispute", { plotId: form.plotId }).then(
+                    (ok) => ok && clearForm(),
+                  )
+                }
+              >
+                Resolve Dispute
+              </button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              style={{ ...S.btn, ...S.btnDanger }}
-              disabled={!form.plotId || !form.caseNumber}
-              onClick={() =>
-                doAction("dispute", {
-                  plotId: form.plotId,
-                  caseNumber: form.caseNumber,
-                  court: form.court,
-                  description: form.description,
-                }).then((ok) => ok && clearForm())
-              }
-            >
-              File Dispute
-            </button>
-            <button
-              style={{ ...S.btn, ...S.btnOutline, ...S.btnSmall }}
-              disabled={!form.plotId}
-              onClick={() =>
-                doAction("resolve-dispute", { plotId: form.plotId }).then(
-                  (ok) => ok && clearForm(),
-                )
-              }
-            >
-              Resolve Dispute
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Selected Land Detail */}
@@ -766,6 +917,250 @@ export default function Home() {
                 {selected.dispute.description}
               </span>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Sales Tab */}
+      {tab === "sales" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Initiate Sale — seller only */}
+          {hasRole("seller") && (
+            <div style={S.formCard}>
+              <div style={S.formTitle}>Initiate Sale Proposal</div>
+              <div style={S.inputGrid}>
+                <select
+                  style={S.select}
+                  value={form.plotId}
+                  onChange={(e) => setForm({ ...form, plotId: e.target.value })}
+                >
+                  <option value="">-- Select your plot --</option>
+                  {lands
+                    .filter(
+                      (l) => l.owner === (userInfo?.username || userInfo?.name),
+                    )
+                    .map((l) => (
+                      <option key={l.plotId} value={l.plotId}>
+                        {l.plotId} — {l.location}
+                      </option>
+                    ))}
+                </select>
+                <input
+                  style={S.input}
+                  placeholder="Buyer CN *"
+                  value={form.buyer}
+                  onChange={(e) => setForm({ ...form, buyer: e.target.value })}
+                />
+                <input
+                  style={S.input}
+                  placeholder="Price (Rs.)"
+                  type="number"
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                />
+              </div>
+              <button
+                style={{ ...S.btn, ...S.btnPrimary }}
+                disabled={!form.plotId || !form.buyer}
+                onClick={() =>
+                  handleSaleAction("initiate-sale", form.plotId, {
+                    buyer: form.buyer,
+                    price: parseFloat(form.price) || 0,
+                  }).then((ok) => ok && clearForm())
+                }
+              >
+                Initiate Sale
+              </button>
+            </div>
+          )}
+
+          {/* Pending Approvals */}
+          {salesLoading ? (
+            <div
+              style={{
+                color: "#666",
+                fontSize: 13,
+                textAlign: "center",
+                padding: 20,
+              }}
+            >
+              Loading sales...
+            </div>
+          ) : (
+            <>
+              {pendingApprovals.length > 0 && (
+                <div style={S.formCard}>
+                  <div style={S.formTitle}>Pending Approvals</div>
+                  {pendingApprovals.map((p) => (
+                    <div
+                      key={p.proposalId || p.plotId}
+                      style={{
+                        background: "#1a1a1a",
+                        border: "1px solid #333",
+                        borderRadius: 8,
+                        padding: 12,
+                        marginBottom: 8,
+                        fontSize: 13,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div>
+                          <code style={{ color: "#a78bfa" }}>
+                            {p.proposalId || p.plotId}
+                          </code>{" "}
+                          <span style={{ color: "#888" }}>
+                            {p.plotId} — Seller: {p.seller} → Buyer: {p.buyer} —
+                            Rs.{p.price}
+                          </span>
+                        </div>
+                      </div>
+                      <div
+                        style={{ marginTop: 8, color: "#777", fontSize: 11 }}
+                      >
+                        Approvals:{" "}
+                        {p.approvals
+                          ? Object.entries(p.approvals)
+                              .map(([k, v]) => `${k}: ${v ? "✅" : "⏳"}`)
+                              .join("  ")
+                          : "None yet"}
+                      </div>
+                      {hasAnyRole("official", "malpot") && (
+                        <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                          <button
+                            style={{ ...S.btn, ...S.btnPrimary, ...S.btnSmall }}
+                            onClick={() =>
+                              handleSaleAction(
+                                "approve-sale",
+                                p.proposalId || p.plotId,
+                              )
+                            }
+                          >
+                            Approve
+                          </button>
+                          <button
+                            style={{ ...S.btn, ...S.btnDanger, ...S.btnSmall }}
+                            onClick={() =>
+                              handleSaleAction(
+                                "reject-sale",
+                                p.proposalId || p.plotId,
+                              )
+                            }
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* My Sale Proposals */}
+              {sales.length > 0 && (
+                <div style={S.formCard}>
+                  <div style={S.formTitle}>My Sale Proposals</div>
+                  {sales.map((p) => (
+                    <div
+                      key={p.proposalId || p.plotId}
+                      style={{
+                        background: "#1a1a1a",
+                        border: "1px solid #333",
+                        borderRadius: 8,
+                        padding: 12,
+                        marginBottom: 8,
+                        fontSize: 13,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div>
+                          <code style={{ color: "#a78bfa" }}>
+                            {p.proposalId || p.plotId}
+                          </code>{" "}
+                          <span style={{ color: "#888" }}>
+                            {p.plotId} — {p.seller} → {p.buyer} — Rs.{p.price}
+                          </span>
+                        </div>
+                        <span
+                          style={{
+                            padding: "2px 8px",
+                            borderRadius: 4,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            background:
+                              p.status === "approved"
+                                ? "#16a34a33"
+                                : p.status === "rejected"
+                                  ? "#dc262633"
+                                  : "#f59e0b33",
+                            color:
+                              p.status === "approved"
+                                ? "#86efac"
+                                : p.status === "rejected"
+                                  ? "#fca5a5"
+                                  : "#fde68a",
+                          }}
+                        >
+                          {p.status || "pending"}
+                        </span>
+                      </div>
+                      <div
+                        style={{ marginTop: 8, color: "#777", fontSize: 11 }}
+                      >
+                        Approvals:{" "}
+                        {p.approvals
+                          ? Object.entries(p.approvals)
+                              .map(([k, v]) => `${k}: ${v ? "✅" : "⏳"}`)
+                              .join("  ")
+                          : "None yet"}
+                      </div>
+                      {p.status === "approved" && (
+                        <button
+                          style={{
+                            ...S.btn,
+                            ...S.btnPrimary,
+                            ...S.btnSmall,
+                            marginTop: 8,
+                          }}
+                          onClick={() =>
+                            handleSaleAction(
+                              "execute-sale",
+                              p.proposalId || p.plotId,
+                            )
+                          }
+                        >
+                          Execute Sale
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {pendingApprovals.length === 0 && sales.length === 0 && (
+                <div
+                  style={{
+                    color: "#666",
+                    fontSize: 13,
+                    textAlign: "center",
+                    padding: 20,
+                  }}
+                >
+                  No sale proposals yet.
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

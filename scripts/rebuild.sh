@@ -113,17 +113,45 @@ for attempt in $(seq 1 20); do
     curl -sf http://localhost:8080/health >/dev/null 2>&1 && break
     sleep 2
 done
+
+# ── Bootstrap on-chain user registry ────────────────────────────────
+# Only Admin@province1 can register users (admin-only operation).
+# All register-user calls must include X-Identity: province1/Admin.
+API="http://localhost:8080/api/land"
+
+log "Registering users on-chain..."
+
+# 1. Bootstrap admin itself
+curl -s -X POST "${API}" -H "Content-Type: application/json" -H "X-Identity: province1/Admin" \
+    -d '{"action":"register-user","userId":"Admin@province1.example.com","name":"System Admin","roles":"[\"admin\"]"}' 2>/dev/null | grep -q "success" && ok "Admin bootstrapped"
+
+# 2. Default backend user — full access for demo
+curl -s -X POST "${API}" -H "Content-Type: application/json" -H "X-Identity: province1/Admin" \
+    -d '{"action":"register-user","userId":"User1@province1.example.com","name":"Province1 Official","roles":"[\"admin\",\"malpot\",\"official\",\"seller\",\"buyer\"]"}' 2>/dev/null | grep -q "success" && ok "User1 (admin/malpot/official/seller/buyer)"
+
+# 3. Second user — court + bank + seller roles
+curl -s -X POST "${API}" -H "Content-Type: application/json" -H "X-Identity: province1/Admin" \
+    -d '{"action":"register-user","userId":"User2@province1.example.com","name":"Court & Bank","roles":"[\"court\",\"bank\",\"seller\",\"buyer\"]"}' 2>/dev/null | grep -q "success" && ok "User2 (court/bank/seller/buyer)"
+ok "Roles assigned"
+
+# Probe + land registration use X-Identity (legacy compat with middleware).
 for attempt in $(seq 1 15); do
-    curl -s -X POST http://localhost:8080/api/land -H "Content-Type: application/json" \
-        -d '{"action":"register","plotId":"_probe","surveyNumber":"X","owner":"X","area":1}' 2>/dev/null | grep -q "success" && break
+    curl -s -X POST "${API}" -H "Content-Type: application/json" -H "X-Identity: province1/Admin" \
+        -d '{"action":"register","plotId":"_probe","surveyNumber":"X","owner":"User1@province1.example.com","area":1}' 2>/dev/null | grep -q "success" && break
     sleep 2
 done
 
+# ── Seed land records ───────────────────────────────────────────────
+# Owners must be valid user CNs (checked by chaincode on transfer)
+OWNER1="User1@province1.example.com"
+OWNER2="User2@province1.example.com"
 for i in 1 2 3 4; do
-    loc="Location${i}"; prov="Province$(( (i-1) % 3 + 1 ))"
+    loc="Location${i}"; pnum="$(( (i-1) % 3 + 1 ))"
+    # Alternate owners between User1 and User2
+    if [ $((i % 2)) -eq 1 ]; then own="${OWNER1}"; else own="${OWNER2}"; fi
     for retry in $(seq 1 5); do
-        curl -s -X POST http://localhost:8080/api/land -H "Content-Type: application/json" \
-            -d "{\"action\":\"register\",\"plotId\":\"plot-00${i}\",\"surveyNumber\":\"SN-${i}001\",\"owner\":\"Owner${i}\",\"location\":\"${loc}\",\"province\":\"${prov}\",\"area\":$((i*200)),\"landType\":\"residential\"}" 2>/dev/null | grep -q "success" && { ok "plot-00${i}"; break; }
+        curl -s -X POST "${API}" -H "Content-Type: application/json" -H "X-Identity: province1/Admin" \
+            -d "{\"action\":\"register\",\"plotId\":\"plot-00${i}\",\"surveyNumber\":\"SN-${i}001\",\"owner\":\"${own}\",\"location\":\"${loc}\",\"province\":\"Province${pnum}\",\"area\":$((i*200)),\"landType\":\"residential\"}" 2>/dev/null | grep -q "success" && { ok "plot-00${i}"; break; }
         sleep 2
     done
 done
