@@ -11,10 +11,10 @@ Private land registry on Hyperledger Fabric v2.5 — 3 private organizations, fu
 
 - **3 private orgs** (Org1–Org3) — each with 1 peer, admin + customer users
 - **Endorsement**: `OutOf(2, ...)` — any 2 of 3 peers must endorse
-- **Roles**: **Admin** (register land, approve transactions) and **Customer** (buy/sell/make offers) — derived from X.509 cert OU
+- **Roles**: **Super Admin** (full block explorer + admin), **Admin** (register land, approve transactions) and **Customer** (buy/sell/make offers) — derived from X.509 cert OU
 - **Go chaincode** `landreg` — 15 focused functions on-chain
 - **Go backend** — Fabric Gateway SDK (gRPC), per-user X.509 signing
-- **JWT auth** with **SQLite** user store (signup/login, 8 seeded dummy users)
+- **JWT auth** with **SQLite** user store (signup/login, 9 seeded dummy users including superadmin)
 - **7 Docker services** — orderer, 3 peers, CLI, backend, frontend
 - **No on-chain RBAC** — trust is via MSP cert OUs (admin vs client)
 

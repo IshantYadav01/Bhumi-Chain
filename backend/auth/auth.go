@@ -63,6 +63,7 @@ func InitDB(dbPath string) error {
 func seedDummyData() error {
 	type s struct{ nid, pass, name, role string }
 	users := []s{
+		{"superadmin", "super123", "Super Admin", "superadmin"},
 		{"admin", "admin123", "System Admin", "admin"},
 		{"NID-001", "pass123", "Alice Sharma", "customer"},
 		{"NID-002", "pass123", "Bob Verma", "customer"},
@@ -132,7 +133,7 @@ func Signup(nid, password, name, role string) (*UserInfo, error) {
 	if role == "" {
 		role = "customer"
 	}
-	if role != "admin" && role != "customer" {
+	if role != "admin" && role != "customer" && role != "superadmin" {
 		return nil, fmt.Errorf("invalid role: %s", role)
 	}
 	var c int

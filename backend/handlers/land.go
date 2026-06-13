@@ -6,9 +6,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hyperledger/fabric-protos-go-apiv2/common"
+	"github.com/hyperledger/fabric-protos-go-apiv2/msp"
+	"github.com/hyperledger/fabric-protos-go-apiv2/peer"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ndhack/backend/fabric"
@@ -29,7 +32,7 @@ func (h *LandHandler) getClient(c *gin.Context) (*fabric.Client, string) {
 	role, _ := c.Get("msp_role")
 	callerID, _ := nid.(string)
 	mspUser := "Admin"
-	if r, ok := role.(string); ok && r != "admin" {
+	if r, ok := role.(string); ok && r != "admin" && r != "superadmin" {
 		mspUser = "User1"
 	}
 	client, err := h.pool.Get(h.defOrg, mspUser)
@@ -135,10 +138,10 @@ func (h *LandHandler) PostAction(c *gin.Context) {
 	}
 }
 
-// assertAdmin checks the JWT role before allowing admin actions.
+// assertAdmin checks the JWT role before allowing admin/superadmin actions.
 func assertAdmin(c *gin.Context) bool {
 	role, _ := c.Get("msp_role")
-	if r, ok := role.(string); ok && r == "admin" {
+	if r, ok := role.(string); ok && (r == "admin" || r == "superadmin") {
 		return true
 	}
 	c.JSON(http.StatusForbidden, models.APIResponse{Error: "admin access required"})
@@ -286,10 +289,13 @@ type blockInfo struct {
 }
 
 type txInfo struct {
-	TxID      string `json:"txId"`
-	Chaincode string `json:"chaincode,omitempty"`
-	Action    string `json:"action,omitempty"`
-	Creator   string `json:"creator,omitempty"`
+	TxID      string   `json:"txId"`
+	Chaincode string   `json:"chaincode,omitempty"`
+	Action    string   `json:"action,omitempty"`
+	Args      []string `json:"args,omitempty"`
+	Creator   string   `json:"creator,omitempty"`
+	Type      string   `json:"type,omitempty"`
+	Timestamp string   `json:"timestamp,omitempty"`
 }
 
 type explorerData struct {
@@ -331,11 +337,31 @@ func (h *LandHandler) handleBlockExplorer(cli *fabric.Client, c *gin.Context) ([
 		if err := proto.Unmarshal(blockRaw, block); err != nil {
 			continue
 		}
-		bi := blockInfo{
-			Number:   block.Header.Number,
-			DataHash: fmt.Sprintf("%x", block.Header.DataHash),
-			PrevHash: fmt.Sprintf("%x", block.Header.PreviousHash),
+
+		// Block timestamp from the first transaction (if available).
+		var blockTime string
+		if len(block.Data.Data) > 0 {
+			env := &common.Envelope{}
+			if err := proto.Unmarshal(block.Data.Data[0], env); err == nil {
+				payload := &common.Payload{}
+				if err := proto.Unmarshal(env.Payload, payload); err == nil {
+					chdr := &common.ChannelHeader{}
+					if err := proto.Unmarshal(payload.Header.ChannelHeader, chdr); err == nil {
+						if chdr.Timestamp != nil {
+							blockTime = chdr.Timestamp.AsTime().UTC().Format(time.RFC3339)
+						}
+					}
+				}
+			}
 		}
+
+		bi := blockInfo{
+			Number:    block.Header.Number,
+			DataHash:  fmt.Sprintf("%x", block.Header.DataHash),
+			PrevHash:  fmt.Sprintf("%x", block.Header.PreviousHash),
+			Timestamp: blockTime,
+		}
+
 		for _, data := range block.Data.Data {
 			env := &common.Envelope{}
 			if err := proto.Unmarshal(data, env); err != nil {
@@ -350,7 +376,63 @@ func (h *LandHandler) handleBlockExplorer(cli *fabric.Client, c *gin.Context) ([
 				continue
 			}
 			bi.TxCount++
-			bi.Transactions = append(bi.Transactions, txInfo{TxID: chdr.TxId})
+
+			tx := txInfo{
+				TxID: chdr.TxId,
+				Type: common.HeaderType(chdr.Type).String(),
+			}
+
+			if chdr.Timestamp != nil {
+				tx.Timestamp = chdr.Timestamp.AsTime().UTC().Format(time.RFC3339)
+			}
+
+			// Decode creator (MSP ID) from SignatureHeader.
+			shdr := &common.SignatureHeader{}
+			if err := proto.Unmarshal(payload.Header.SignatureHeader, shdr); err == nil {
+				creator := &msp.SerializedIdentity{}
+				if err := proto.Unmarshal(shdr.Creator, creator); err == nil {
+					tx.Creator = creator.Mspid
+				}
+			}
+
+			// Decode chaincode invocation details from the transaction payload.
+			if chdr.Type == int32(common.HeaderType_ENDORSER_TRANSACTION) {
+				txPayload := &peer.Transaction{}
+				if err := proto.Unmarshal(payload.Data, txPayload); err != nil {
+					goto appendTx
+				}
+				for _, action := range txPayload.Actions {
+					capp := &peer.ChaincodeActionPayload{}
+					if err := proto.Unmarshal(action.Payload, capp); err != nil {
+						continue
+					}
+					if capp.GetChaincodeProposalPayload() == nil {
+						continue
+					}
+					cpp := &peer.ChaincodeProposalPayload{}
+					if err := proto.Unmarshal(capp.GetChaincodeProposalPayload(), cpp); err != nil {
+						continue
+					}
+					cis := &peer.ChaincodeInvocationSpec{}
+					if err := proto.Unmarshal(cpp.GetInput(), cis); err != nil {
+						continue
+					}
+					if cis.ChaincodeSpec != nil && cis.ChaincodeSpec.Input != nil {
+						args := cis.ChaincodeSpec.Input.Args
+						if len(args) > 0 {
+							tx.Chaincode = cis.ChaincodeSpec.ChaincodeId.Name
+							tx.Action = string(args[0])
+							for _, a := range args[1:] {
+								tx.Args = append(tx.Args, string(a))
+							}
+						}
+					}
+					break // first action is enough
+				}
+			}
+
+		appendTx:
+			bi.Transactions = append(bi.Transactions, tx)
 		}
 		blocks = append(blocks, bi)
 	}

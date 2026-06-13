@@ -25,15 +25,25 @@ echo "╔═══════════════════════�
 echo "║  Land Registry — Full Rebuild    ║"
 echo "╚══════════════════════════════════╝"
 
+log "Pulling Fabric images..."
+docker pull hyperledger/fabric-peer:2.5
+docker pull hyperledger/fabric-orderer:2.5
+docker pull hyperledger/fabric-tools:2.5
+docker pull hyperledger/fabric-ccenv:2.5
+ok "Images ready"
+
+log "Installing dependencies..."
+cd "$PROJ/backend/chaincode/go/landreg" && go mod tidy 2>/dev/null
+cd "$PROJ/frontend" && npm install --silent 2>/dev/null
+cd "$PROJ/network"
+ok "Dependencies ready"
+
 log "Tearing down..."
 cd network
 docker compose --project-directory .. down -v --remove-orphans 2>/dev/null || true
 docker rmi -f $(docker images -q --filter "reference=dev-peer*landreg*") 2>/dev/null || true
 rm -rf organizations channel-artifacts
 ok "Cleaned"
-
-log "Chaincode deps..."
-cd ../backend/chaincode/go/landreg && go mod tidy 2>/dev/null; cd "$PROJ/network"
 
 log "Generating MSP certs..."
 docker run --rm -v "$(pwd):/work:Z" -w /work hyperledger/fabric-tools:2.5 \

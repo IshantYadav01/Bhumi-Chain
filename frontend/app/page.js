@@ -76,7 +76,8 @@ export default function Home() {
     txId: "",
   });
 
-  const admin = u?.role === "admin";
+  const admin = u?.role === "admin" || u?.role === "superadmin";
+  const superAdmin = u?.role === "superadmin";
 
   const t = (msg, ok = true) => {
     setToast({ msg, ok });
@@ -239,7 +240,8 @@ export default function Home() {
             Land Registry
           </h1>
           <p className="text-xs text-[#888] mt-1">
-            {admin ? "Admin" : "Customer"} Dashboard
+            {superAdmin ? "Super Admin" : admin ? "Admin" : "Customer"}{" "}
+            Dashboard
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -1023,7 +1025,14 @@ export default function Home() {
                         <span className="font-semibold text-[#a78bfa]">
                           Block #{b.number}
                         </span>
-                        <span className="text-[#888]">{b.txCount} tx(s)</span>
+                        <span className="text-[#888]">
+                          {b.txCount} tx(s){" "}
+                          {b.timestamp && (
+                            <span className="text-[#555]">
+                              · {b.timestamp.slice(0, 19).replace("T", " ")}
+                            </span>
+                          )}
+                        </span>
                       </div>
                       <div className="text-[#555] text-[11px] mb-1 truncate">
                         <span className="text-[#777]">Hash:</span>{" "}
@@ -1036,12 +1045,55 @@ export default function Home() {
                       {b.transactions?.map((tx) => (
                         <div
                           key={tx.txId}
-                          className="ml-2 text-[#555] text-[11px] truncate"
+                          className="ml-2 border-l-2 border-[#2a2a3e] pl-2 mt-1.5"
                         >
-                          └{" "}
-                          <code className="text-[#7c3aed]">
-                            {tx.txId?.slice(0, 24)}...
-                          </code>
+                          <div className="text-[11px]">
+                            <code className="text-[#7c3aed]">
+                              {tx.txId?.slice(0, 32)}...
+                            </code>
+                          </div>
+                          {superAdmin && (
+                            <div className="text-[#666] text-[10px] mt-0.5 space-y-0.5">
+                              {tx.type && (
+                                <div>
+                                  <span className="text-[#888]">Type:</span>{" "}
+                                  {tx.type}
+                                </div>
+                              )}
+                              {tx.creator && (
+                                <div>
+                                  <span className="text-[#888]">Creator:</span>{" "}
+                                  {tx.creator}
+                                </div>
+                              )}
+                              {tx.chaincode && (
+                                <div>
+                                  <span className="text-[#888]">
+                                    Chaincode:
+                                  </span>{" "}
+                                  {tx.chaincode}
+                                </div>
+                              )}
+                              {tx.action && (
+                                <div>
+                                  <span className="text-[#a78bfa] font-semibold">
+                                    {tx.action}
+                                  </span>
+                                  {tx.args?.length > 0 && (
+                                    <span className="text-[#666]">
+                                      ( {tx.args.join(", ")})
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {tx.timestamp && (
+                                <div>
+                                  <span className="text-[#888]">Time:</span>{" "}
+                                  {tx.timestamp.slice(0, 19).replace("T", " ")}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
