@@ -7,22 +7,23 @@
 
 ## 1. Project Overview
 
-Private land registry on Hyperledger Fabric v2.5 — 3 private organizations, fully containerized:
+Private land registry on Hyperledger Fabric v2.5 — single organization, 3 peers, fully containerized:
 
-- **3 private orgs** (Org1–Org3) — each with 1 peer, admin + customer users
-- **Endorsement**: `OutOf(2, ...)` — any 2 of 3 peers must endorse
-- **Roles**: **Super Admin** (full block explorer + admin), **Admin** (register land, approve transactions) and **Customer** (buy/sell/make offers) — derived from X.509 cert OU
-- **Go chaincode** `landreg` — 15 focused functions on-chain
-- **Go backend** — Fabric Gateway SDK (gRPC), per-user X.509 signing
-- **JWT auth** with **SQLite** user store (signup/login, 9 seeded dummy users including superadmin)
+- **1 org** (LandregMSP) — 3 peers, admin + customer users
+- **Endorsement**: `OutOf(2, LandregMSP.peer)` — any 2 of 3 peers must endorse
+- **Roles**: **Super Admin** (full block explorer), **Admin** (register land, approve), **Customer** (buy/sell/offer)
+- **Identity pattern**: External customer identity passed as `caller` param; Fabric cert reserved for admin
+- **Go chaincode** `landreg` — 16 functions on-chain
+- **Go backend** — Fabric Gateway SDK (gRPC), per-identity signing via MSP certs
+- **JWT auth** with **SQLite** user store (signup/login, 9 seeded users including superadmin)
 - **7 Docker services** — orderer, 3 peers, CLI, backend, frontend
-- **No on-chain RBAC** — trust is via MSP cert OUs (admin vs client)
+- **No on-chain RBAC** — trust via MSP cert OUs (admin vs client)
 
 ### Workflow
 
 ```
 Admin registers land ──► Owner lists for sale (with price)
-     Buyer makes offer ──► Owner accepts offer
+     Buyer makes/updates offer ──► Owner accepts offer
           Buyer confirms ──► Admin approves ──► Transfer executes
 ```
 
@@ -34,81 +35,88 @@ Admin registers land ──► Owner lists for sale (with price)
 
 | File | Role |
 |------|------|
-| `docker-compose.yaml` | `include: network/docker-compose.yaml` — start from project root |
+| `docker-compose.yaml` | `include: network/docker-compose.yaml` |
 | `.env` | `COMPOSE_PROJECT_NAME=fabric` |
 
 ### 2.2 Network (`network/`)
 
 | File | Role |
 |------|------|
-| `crypto-config.yaml` | 3 orgs (Org1–Org3), 1 peer each, admin + User1 each |
-| `configtx.yaml` | 3 orgs, `OutOf(2, ...)` endorsement, RAFT consensus |
+| `crypto-config.yaml` | 1 org (LandregMSP), 1 peer each on ports 7051/8051/9051, Admin + User1 identities |
+| `configtx.yaml` | 1 org, `OutOf(2, LandregMSP.peer)` endorsement, RAFT consensus |
 | `docker-compose.yaml` | 7 services: orderer + 3 peers + CLI + backend + frontend |
 
-**Key compose patterns** (per peer `org${i}`):
-- Peer port: `7051 + (i-1)*1000`, chaincode port: peer + 1
-- MSP ID: `Org${i}MSP`
-- Network: `fabric-net` (explicit `name:` to avoid prefix)
+**Key compose patterns**:
+- Peer ports: 7051, 8051, 9051; chaincode ports: 7052, 8052, 9052
+- MSP ID: `LandregMSP`
+- Network: `fabric-net` (explicit `name:`)
 
 ### 2.3 Go Backend (`backend/`)
 
 | File | Role |
 |------|------|
-| `Dockerfile` | Multi-stage: `golang:1.22-alpine` → `alpine:3.20` (pure-Go SQLite, no CGO) |
-| `main.go` | HTTP server (Gin), routes, JWT middleware, graceful shutdown |
+| `Dockerfile` | Multi-stage: `golang:1.22-alpine` → `alpine:3.20` (CGO_ENABLED=0) |
+| `main.go` | Gin server, JWT middleware (`jwtMiddleware`), routes |
 | `config/config.go` | Auto-detects Docker vs host mode |
 | `fabric/client.go` | Gateway client pool — lazy per-identity connections, gRPC |
-| `fabric/identity.go` | Loads X.509 identities from MSP dirs |
-| `auth/auth.go` | JWT auth with SQLite user store, signup, seed data |
-| `handlers/land.go` | 9 REST handlers for land + sale workflow |
-| `models/models.go` | ActionRequest + APIResponse DTOs |
-| `go.mod` | Module `github.com/ndhack/backend`, deps: `fabric-gateway v1.5.1`, `gin v1.10.0`, `modernc.org/sqlite`, `jwt/v5` |
+| `fabric/identity.go` | Loads X.509 identities from MSP directories |
+| `auth/auth.go` | JWT auth with SQLite user store, signup, 9 seeded users |
+| `handlers/land.go` | REST handlers for land + sale workflow + block explorer |
+| `models/models.go` | `ActionRequest` + `APIResponse` DTOs |
+| `go.mod` | Module `github.com/ndhack/backend` |
 
 ### 2.4 Chaincode (`backend/chaincode/go/landreg/`)
 
 | File | Role |
 |------|------|
-| `landreg.go` | 15 functions using `fabric-contract-api-go/v2` |
+| `landreg.go` | 16 functions using `fabric-contract-api-go/v2` |
+| `landreg_test.go` | Unit tests with custom mock stub |
 | `go.mod` | Module `github.com/ndhack/landreg`, Go 1.22 |
 
 **Data types**: `LandRecord`, `TransferRecord`, `SaleListing`, `BuyerOffer`, `Transaction`
 
+**Key prefixes**: `LISTING_`, `OFFER_`, `TX_` — used as world-state key prefixes
+
 **Chaincode functions**:
 - **Admin**: `RegisterLand`, `AdminApproveTransaction`
-- **Customer**: `ListForSale`, `CancelListing`, `MakeOffer`, `AcceptOffer`, `ConfirmTransaction`, `RejectTransaction`
+- **Customer**: `ListForSale`, `CancelListing`, `MakeOffer`, `UpdateOffer`, `AcceptOffer`, `ConfirmTransaction`, `RejectTransaction`
 - **Queries**: `GetAllLand`, `QueryLand`, `GetMyLands`, `GetListings`, `GetMyOffers`, `GetOffersForLand`, `GetPendingTransactions`, `GetMyTransactions`
+
+**Identity pattern**: Customer identity (`caller`) is passed as a function parameter from the backend (extracted from JWT `nid` claim). Fabric MSP identity (cert OU) is used only for admin checks via `isAdmin()`.
 
 ### 2.5 Auth Store (`auth/`)
 
 SQLite database at `backend/data/landreg.db` (auto-created on startup).
 
-**Seeded users** (all passwords match usernames + "123": `admin123`, `alice123`, etc.):
+**Seeded users** (all customer passwords: `pass123`):
 
-| Username | Org | MSP User | Role |
-|----------|-----|----------|------|
-| admin | org1 | Admin | admin |
-| alice | org1 | User1 | customer |
-| bob | org1 | User1 | customer |
-| carol | org2 | User1 | customer |
-| dave | org2 | User1 | customer |
-| eve | org3 | User1 | customer |
-| frank | org3 | User1 | customer |
+| NID | Name | Role |
+|-----|------|------|
+| superadmin | Super Admin | superadmin |
+| admin | System Admin | admin |
+| NID-001 | Alice Sharma | customer |
+| NID-002 | Bob Verma | customer |
+| NID-003 | Carol Singh | customer |
+| NID-004 | Dave Patel | customer |
+| NID-005 | Eve Gupta | customer |
+| NID-006 | Frank Das | customer |
 
 ### 2.6 Frontend (`frontend/`)
 
 | File | Role |
 |------|------|
-| `Dockerfile` | `node:18-alpine`, `BACKEND_URL=http://backend:8080` |
-| `app/page.js` | "use client" — land table, forms, status tabs, owner filter, detail panel |
-| `app/layout.js` | Root layout — dark theme |
-| `next.config.js` | Rewrites `/api/*` → `${BACKEND_URL}/api/*` (Docker DNS: `backend:8080`) |
-| `package.json` | `next`, `react`, `react-dom` only |
+| `Dockerfile` | `node:18-alpine`, `npm install`, `npm run dev` |
+| `app/page.js` | "use client" — full dashboard: lands, listings, offers, transactions, admin, block explorer |
+| `app/layout.js` | Root layout — dark theme, metadata |
+| `app/login/page.js` | Login page with JWT auth |
+| `lib/auth.js` | `getToken()`, `setToken()`, `authHeaders()`, `fetchWithAuth()` |
+| `next.config.js` | Rewrites `/api/*` → backend |
 
 ### 2.7 Scripts (`scripts/`)
 
 | Script | Role |
 |--------|------|
-| `rebuild.sh` | Full lifecycle: tear down → chaincode deps → cryptogen → configtxgen → build + up → channel + anchors → chaincode install/approve/commit → seed |
+| `rebuild.sh` | Full lifecycle: pull images → deps → teardown → crypto → network → chaincode → seed |
 | `quickstart.sh` | `docker compose up -d --build` |
 | `stop.sh` | `docker compose down -v --remove-orphans` |
 
@@ -118,20 +126,19 @@ SQLite database at `backend/data/landreg.db` (auto-created on startup).
 
 ### GET /api/land
 
-| Query param | Chaincode function |
-|-------------|--------------------|
-| _(none)_ | `GetAllLand` |
-| `?id=X` | `QueryLand(X)` |
-| `?action=my-lands` | `GetMyLands` |
-| `?action=listings` | `GetListings` |
-| `?action=my-offers` | `GetMyOffers` |
-| `?action=my-transactions` | `GetMyTransactions` |
-| `?action=pending-transactions` | `GetPendingTransactions` |
-| `?landId=X` | `GetOffersForLand(X)` |
+| Query param | Chaincode function | Auth |
+|-------------|--------------------|------|
+| _(none)_ | `GetAllLand` | admin |
+| `?id=X` | `QueryLand(X)` | any |
+| `?action=my-lands` | `GetMyLands(caller)` | any |
+| `?action=listings` | `GetListings` | any |
+| `?action=my-offers` | `GetMyOffers(caller)` | any |
+| `?action=my-transactions` | `GetMyTransactions(caller)` | any |
+| `?action=pending-transactions` | `GetPendingTransactions` | admin |
+| `?action=explorer&blocks=N` | Block explorer (QSCC) | admin |
+| `?landId=X` | `GetOffersForLand(caller, X)` | owner |
 
 ### POST /api/land
-
-Body: `{"action": "<action>", ...fields}`
 
 | action | Required fields | Chaincode function |
 |--------|----------------|--------------------|
@@ -149,10 +156,10 @@ Body: `{"action": "<action>", ...fields}`
 
 | Method | Path | Body | Purpose |
 |--------|------|------|---------|
-| POST | `/api/login` | `{ username, password }` | Returns JWT + user info |
-| POST | `/api/signup` | `{ username, password, name, org, role }` | Create new user |
+| POST | `/api/login` | `{ nid, password }` | Returns JWT + user info |
+| POST | `/api/signup` | `{ nid, password, name, role }` | Create new user |
 
-Auth is required via `Authorization: Bearer <token>` header on all `/api/*` endpoints except `/health`, `/api/login`, `/api/signup`.
+Auth via `Authorization: Bearer <token>` on all `/api/*` endpoints except `/health`, `/api/login`, `/api/signup`.
 
 ---
 
@@ -160,10 +167,10 @@ Auth is required via `Authorization: Bearer <token>` header on all `/api/*` endp
 
 | Service | Host Port | Container |
 |---------|-----------|-----------|
-| orderer | 7050 | orderer.example.com |
-| Org1 peer | 7051/7052 | peer0.org1.example.com |
-| Org2 peer | 8051/8052 | peer0.org2.example.com |
-| Org3 peer | 9051/9052 | peer0.org3.example.com |
+| orderer | 7050 | orderer.landreg.com |
+| peer0 | 7051/7052 | peer0.landreg.com |
+| peer1 | 8051/8052 | peer1.landreg.com |
+| peer2 | 9051/9052 | peer2.landreg.com |
 | Backend | 8080 | landreg-backend |
 | Frontend | 3000 | landreg-frontend |
 
@@ -172,33 +179,33 @@ Auth is required via `Authorization: Bearer <token>` header on all `/api/*` endp
 ## 5. Implementation Summary
 
 ### Network
-- 3 orgs renamed from Province1-3 → Org1-3
-- Endorsement policy: `OutOf(2, 'Org1MSP.peer', 'Org2MSP.peer', 'Org3MSP.peer')`
-- All TLS, docker-compose, configtx references updated
+- Single org (LandregMSP), 3 peers
+- Endorsement: `OutOf(2, 'LandregMSP.peer')`
+- RAFT ordering, TLS enabled, gateway enabled on all peers
 
 ### Chaincode
-- Removed: on-chain RBAC (User records, RegisterUser, etc.), province, survey/malpot/official roles, mortgage, dispute, land split, multi-approval sale proposals
-- Added: `SaleListing`, `BuyerOffer`, `Transaction` types with full sale workflow
-- Auth via X.509 cert OU: `isAdmin()` checks for OU=admin
-- 15 functions covering register, list, offer, accept, confirm, approve, reject + queries
+- Pass-through identity: customer NID from JWT → `caller` parameter
+- Admin check: `isAdmin()` reads X.509 cert OU
+- Key construction: `OFFER_{landId}_{buyer}`, `TX_{landId}`, `LISTING_{landId}`
+- All state changes use `PutState` with JSON marshaling
 
 ### Backend
 - SQLite auth store with signup/login
-- 8 seeded dummy users across 3 orgs
-- JWT-only auth (no X-Identity header)
-- `/api/signup` endpoint for user registration
-- Clean handlers mapped to new chaincode API
+- 9 seeded users (1 superadmin, 1 admin, 6 customers)
+- JWT middleware injects `msp_nid` and `msp_role` into Gin context
+- Block explorer decodes chaincode invocation details (function, args, creator MSP, timestamp) from protobuf
+- `BlockchainReceipt` type for standardized verification metadata
 
-### Auth
-- Removed: hardcoded credentials, X-Identity header fallback
-- Added: `auth.InitDB()`, `auth.Signup()`, SQLite persistence
-- Users table: id, username, password_hash, display_name, org, msp_user, role
+### Frontend
+- Single-page "use client" Next.js app
+- Role-based tab visibility: admin/superadmin see Admin + Block Explorer tabs
+- Superadmin sees full block details (type, creator, chaincode, action, args, timestamp)
+- Edit Bid feature for updating pending offers
+- 8-second polling refresh
+- Toast notifications for action results
 
-### Stripped/Removed
-- Government concepts (provinces, malpots, officials, surveyors)
-- On-chain user management (RegisterUser, UpdateUserRoles, etc.)
-- Mortgage, dispute, land split functionality
-- Multi-party sale proposal workflow (approvals map)
-- Province, SurveyNumber, LandType, ParentPlotID fields
-- Legacy X-Identity header
-- Hardcoded credential map
+### Recent Features Added
+- **Multi-buyer bids**: Fixed duplicate-offer guard (was blocking all second offers)
+- **Bid editing**: `UpdateOffer` chaincode function + frontend "Edit Bid" button
+- **Superadmin**: Full block explorer with decoded transaction details
+- **Rebuild script**: Pre-pulls all Fabric images, runs `npm install`, JWT-authenticated seed
