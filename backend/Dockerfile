@@ -1,7 +1,7 @@
 FROM golang:1.22-alpine AS builder
 WORKDIR /src
 COPY . .
-RUN CGO_ENABLED=0 go build -mod=vendor -o server .
+RUN go mod vendor && CGO_ENABLED=0 go build -mod=vendor -o server .
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates curl
