@@ -188,6 +188,11 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+    volumes:
+      # bind mount for hot-reloading during development; remove for production
+      - ../frontend:/app
+      # ignore node_modules to prevent conflicts between host and container
+      - /app/node_modules
     image: ndhack-frontend:latest
     environment:
       - BACKEND_URL=http://backend:8080
