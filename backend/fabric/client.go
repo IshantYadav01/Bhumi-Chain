@@ -37,6 +37,7 @@ type PoolConfig struct {
 	ChannelID     string
 	ChaincodeName string
 	CryptoBase    string // base path to organizations/
+	Domain        string // org domain, e.g. "landreg.com"
 }
 
 // NewPool creates a client pool.
@@ -69,7 +70,7 @@ func (p *Pool) Get(org, user string) (*Client, error) {
 		return c, nil
 	}
 
-	id, err := LoadIdentity(p.cfg.CryptoBase, org, user)
+	id, err := LoadIdentity(p.cfg.CryptoBase, p.cfg.Domain, user)
 	if err != nil {
 		return nil, fmt.Errorf("pool: load identity %s: %w", key, err)
 	}
@@ -148,15 +149,20 @@ func (c *Client) Close() {
 
 // ── Public operations ───────────────────────────────────────────────
 
-// Evaluate runs a read-only chaincode query.  Returns parsed JSON.
+// Evaluate runs a read-only chaincode query.
 func (c *Client) Evaluate(fcn string, args ...string) ([]byte, error) {
 	return c.contract.EvaluateTransaction(fcn, args...)
 }
 
-// Submit submits a chaincode invocation.  Returns the transaction
-// result as raw bytes (JSON from chaincode).
+// Submit submits a chaincode invocation.
 func (c *Client) Submit(fcn string, args ...string) ([]byte, error) {
 	return c.contract.SubmitTransaction(fcn, args...)
+}
+
+// EvaluateQSCC evaluates a query on the QSCC system chaincode (block explorer).
+func (c *Client) EvaluateQSCC(fcn string, args ...string) ([]byte, error) {
+	qscc := c.network.GetContract("qscc")
+	return qscc.EvaluateTransaction(fcn, args...)
 }
 
 // ── TLS helpers ─────────────────────────────────────────────────────

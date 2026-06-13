@@ -16,27 +16,26 @@ type Identity struct {
 	ID    *identity.X509Identity
 	Sign  identity.Sign
 	Cert  *x509.Certificate
-	Org   string
 	User  string
 }
 
-// LoadIdentity loads a user identity from an MSP directory.
-// Base path: {base}/peerOrganizations/{org}.example.com/users/{user}@{org}.example.com/msp/
-func LoadIdentity(basePath, org, user string) (*Identity, error) {
+// LoadIdentity loads a user identity from MSP directory.
+// Path: {base}/peerOrganizations/{domain}/users/{user}@{domain}/msp/
+func LoadIdentity(basePath, domain, user string) (*Identity, error) {
 	userDir := filepath.Join(basePath, "peerOrganizations",
-		fmt.Sprintf("%s.example.com", org),
+		domain,
 		"users",
-		fmt.Sprintf("%s@%s.example.com", user, org),
+		fmt.Sprintf("%s@%s", user, domain),
 		"msp",
 	)
 
-	certPath, err := findCert(filepath.Join(userDir, "signcerts"), user, org)
+	certPath, err := findCert(filepath.Join(userDir, "signcerts"), user, domain)
 	if err != nil {
-		return nil, fmt.Errorf("identity %s/%s: %w", org, user, err)
+		return nil, fmt.Errorf("identity %s/%s: %w", domain, user, err)
 	}
 	keyPath, err := findKey(filepath.Join(userDir, "keystore"))
 	if err != nil {
-		return nil, fmt.Errorf("identity %s/%s: %w", org, user, err)
+		return nil, fmt.Errorf("identity %s/%s: %w", domain, user, err)
 	}
 
 	certPEM, err := os.ReadFile(certPath)
@@ -47,9 +46,9 @@ func LoadIdentity(basePath, org, user string) (*Identity, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse cert %s: %w", certPath, err)
 	}
-	id, err := identity.NewX509Identity(mspID(org), cert)
+	id, err := identity.NewX509Identity(mspID(domain), cert)
 	if err != nil {
-		return nil, fmt.Errorf("new x509 identity %s/%s: %w", org, user, err)
+		return nil, fmt.Errorf("new x509 identity %s/%s: %w", domain, user, err)
 	}
 
 	keyPEM, err := os.ReadFile(keyPath)
@@ -62,34 +61,48 @@ func LoadIdentity(basePath, org, user string) (*Identity, error) {
 	}
 	sign, err := identity.NewPrivateKeySign(privKey)
 	if err != nil {
-		return nil, fmt.Errorf("sign func %s/%s: %w", org, user, err)
+		return nil, fmt.Errorf("sign func %s/%s: %w", domain, user, err)
 	}
 
 	return &Identity{
-		MSPID: mspID(org),
+		MSPID: mspID(domain),
 		ID:    id,
 		Sign:  sign,
-		Org:   org,
 		User:  user,
 		Cert:  cert,
 	}, nil
 }
 
-// mspID derives the MSP ID from org name (e.g. "org1" → "Org1MSP").
-func mspID(org string) string {
-	if len(org) == 0 {
+// mspID derives the MSP ID from org domain (e.g. "landreg.com" → "LandRegMSP").
+func mspID(domain string) string {
+	parts := strings.SplitN(domain, ".", 2)
+	if len(parts) == 0 || parts[0] == "" {
 		return "MSP"
 	}
-	return strings.ToUpper(org[:1]) + org[1:] + "MSP"
+	// Handle camelCase: "landreg" → "LandReg"
+	s := parts[0]
+	// Find capital letters in original to preserve them
+	result := ""
+	for i, r := range s {
+		if i == 0 {
+			result += strings.ToUpper(string(r))
+		} else if r >= 'A' && r <= 'Z' {
+			// Already capitalized, keep it
+			result += string(r)
+		} else {
+			result += string(r)
+		}
+	}
+	return result + "MSP"
 }
 
 // findCert finds the X.509 certificate PEM file in a signcerts directory.
-func findCert(signcertsDir, user, org string) (string, error) {
+func findCert(signcertsDir, user, domain string) (string, error) {
 	entries, err := os.ReadDir(signcertsDir)
 	if err != nil {
 		return "", fmt.Errorf("read signcerts %s: %w", signcertsDir, err)
 	}
-	expected := fmt.Sprintf("%s@%s.example.com-cert.pem", user, org)
+	expected := fmt.Sprintf("%s@%s-cert.pem", user, domain)
 	for _, e := range entries {
 		if !e.IsDir() && e.Name() == expected {
 			return filepath.Join(signcertsDir, e.Name()), nil

@@ -37,6 +37,7 @@ func main() {
 		ChannelID:     cfg.ChannelID,
 		ChaincodeName: cfg.ChaincodeName,
 		CryptoBase:    cfg.CryptoPath,
+		Domain:        "landreg.com",
 	})
 	defer pool.Close()
 

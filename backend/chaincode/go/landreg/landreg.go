@@ -334,6 +334,9 @@ func (s *SmartContract) RejectTransaction(
 // ══════════════════════════════════════════════════════════════════════
 
 func (s *SmartContract) GetAllLand(ctx contractapi.TransactionContextInterface) (string, error) {
+	if !s.isAdmin(ctx) {
+		return "", fmt.Errorf("only admin can view all land records")
+	}
 	records, err := s.filterLand(ctx, func(r *LandRecord) bool { return true })
 	if err != nil {
 		return "", err

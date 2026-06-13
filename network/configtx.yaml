@@ -1,19 +1,19 @@
 ---
 Organizations:
   - &LandReg
-    Name: LandRegMSP
-    ID: LandRegMSP
+    Name: LandregMSP
+    ID: LandregMSP
     MSPDir: organizations/peerOrganizations/landreg.com/msp
     Policies:
       Readers:
         {
           Type: Signature,
-          Rule: "OR('LandRegMSP.admin','LandRegMSP.peer','LandRegMSP.client')",
+          Rule: "OR('LandregMSP.admin','LandregMSP.peer','LandregMSP.client')",
         }
       Writers:
-        { Type: Signature, Rule: "OR('LandRegMSP.admin','LandRegMSP.client')" }
-      Admins: { Type: Signature, Rule: "OR('LandRegMSP.admin')" }
-      Endorsement: { Type: Signature, Rule: "OR('LandRegMSP.peer')" }
+        { Type: Signature, Rule: "OR('LandregMSP.admin','LandregMSP.client')" }
+      Admins: { Type: Signature, Rule: "OR('LandregMSP.admin')" }
+      Endorsement: { Type: Signature, Rule: "OR('LandregMSP.peer')" }
     AnchorPeers:
       - Host: peer0.landreg.com
         Port: 7051
@@ -28,7 +28,7 @@ Application: &ApplicationDefaults
     Writers: { Type: ImplicitMeta, Rule: "ANY Writers" }
     Admins: { Type: ImplicitMeta, Rule: "MAJORITY Admins" }
     LifecycleEndorsement: { Type: ImplicitMeta, Rule: "MAJORITY Endorsement" }
-    Endorsement: { Type: Signature, Rule: "OutOf(2, 'LandRegMSP.peer')" }
+    Endorsement: { Type: Signature, Rule: "OR('LandregMSP.peer')" }
   Capabilities: *ApplicationCapabilities
 Orderer: &OrdererDefaults
   OrdererType: etcdraft

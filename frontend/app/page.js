@@ -60,6 +60,7 @@ export default function Home() {
   const [pendingTxs, setPendingTxs] = useState([]);
   const [offersForLand, setOffersForLand] = useState([]);
   const [sel, setSel] = useState(null);
+  const [explorer, setExplorer] = useState(null);
 
   // Form
   const [f, setF] = useState({
@@ -98,6 +99,15 @@ export default function Home() {
         }
         if (!res.ok) {
           const d = await res.json();
+          if (
+            d.error &&
+            (d.error.includes("caller identity") ||
+              d.error.includes("identity required"))
+          ) {
+            clearToken();
+            router.replace("/login");
+            return null;
+          }
           throw new Error(d.error || "API error");
         }
         const data = await res.json();
@@ -127,6 +137,14 @@ export default function Home() {
         }
         const data = await res.json();
         if (data.error) {
+          if (
+            data.error.includes("caller identity") ||
+            data.error.includes("identity required")
+          ) {
+            clearToken();
+            router.replace("/login");
+            return null;
+          }
           t(data.error, false);
           return null;
         }
@@ -141,9 +159,11 @@ export default function Home() {
   );
 
   const fl = useCallback(async () => {
-    const d = await apiGet("/api/land");
+    // Admin sees all lands, customers see only their own
+    const url = admin ? "/api/land" : "/api/land?action=my-lands";
+    const d = await apiGet(url);
     if (d !== null) setLands(d);
-  }, [apiGet]);
+  }, [apiGet, admin]);
   const fls = useCallback(async () => {
     const d = await apiGet("/api/land?action=listings");
     if (d !== null) setListings(d);
@@ -161,6 +181,11 @@ export default function Home() {
     if (d !== null) setPendingTxs(d);
   }, [apiGet]);
 
+  const fe = useCallback(async () => {
+    const d = await apiGet("/api/land?action=explorer&blocks=20");
+    if (d !== null) setExplorer(d);
+  }, [apiGet]);
+
   useEffect(() => {
     setLoading(true);
     const calls = [fl(), fls(), fo(), ft()];
@@ -176,7 +201,8 @@ export default function Home() {
       ft();
       if (admin) fpt();
     }
-  }, [view, fl, fls, fo, ft, fpt, admin]);
+    if (view === "explorer") fe();
+  }, [view, fl, fls, fo, ft, fpt, admin, fe]);
 
   // Poll for data every 8 seconds
   useEffect(() => {
@@ -253,7 +279,12 @@ export default function Home() {
           ["listings", "For Sale"],
           ["offers", "My Offers"],
           ["transactions", "Transactions"],
-          ...(admin ? [["admin", "Admin Panel"]] : []),
+          ...(admin
+            ? [
+                ["admin", "Admin"],
+                ["explorer", "Block Explorer"],
+              ]
+            : []),
         ].map(([k, label]) => (
           <button
             key={k}
@@ -676,7 +707,7 @@ export default function Home() {
           {/* ── TRANSACTIONS ── */}
           {view === "transactions" && (
             <>
-              {/* Pending admin (admin only) */}
+              {/* Pending admin — shown in Admin tab AND here for admin */}
               {admin && pendingTxs.length > 0 && (
                 <div className={fc}>
                   <div className="text-sm font-semibold text-[#ccc] mb-3">
@@ -922,6 +953,55 @@ export default function Home() {
                 )}
               </div>
             </>
+          )}
+
+          {/* ── BLOCK EXPLORER ── */}
+          {view === "explorer" && admin && explorer && (
+            <div className={card}>
+              <div className="px-4 py-3 border-b border-[#2a2a3e] text-sm font-semibold text-[#ccc]">
+                Block Explorer — Height: {explorer.height} blocks
+              </div>
+              {explorer.blocks?.length > 0 ? (
+                <div className="p-2">
+                  {[...explorer.blocks].reverse().map((b) => (
+                    <div
+                      key={b.number}
+                      className="bg-[#1a1a1a] border border-[#333] rounded-lg p-3 mb-2 text-xs"
+                    >
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-semibold text-[#a78bfa]">
+                          Block #{b.number}
+                        </span>
+                        <span className="text-[#888]">{b.txCount} tx(s)</span>
+                      </div>
+                      <div className="text-[#555] text-[11px] mb-1 truncate">
+                        <span className="text-[#777]">Hash:</span>{" "}
+                        {b.dataHash?.slice(0, 32)}...
+                      </div>
+                      <div className="text-[#555] text-[11px] mb-1 truncate">
+                        <span className="text-[#777]">Prev:</span>{" "}
+                        {b.prevHash?.slice(0, 32)}...
+                      </div>
+                      {b.transactions?.map((tx) => (
+                        <div
+                          key={tx.txId}
+                          className="ml-2 text-[#555] text-[11px] truncate"
+                        >
+                          └{" "}
+                          <code className="text-[#7c3aed]">
+                            {tx.txId?.slice(0, 24)}...
+                          </code>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10 text-[#666] text-xs">
+                  No blocks found.
+                </div>
+              )}
+            </div>
           )}
         </>
       )}

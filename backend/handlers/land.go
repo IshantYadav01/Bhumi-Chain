@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hyperledger/fabric-protos-go-apiv2/common"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ndhack/backend/fabric"
 	"github.com/ndhack/backend/models"
@@ -55,6 +59,8 @@ func (h *LandHandler) QueryLand(c *gin.Context) {
 		raw, err = cli.Evaluate("GetMyTransactions", callerID)
 	case action == "pending-transactions":
 		raw, err = cli.Evaluate("GetPendingTransactions")
+	case action == "explorer":
+		raw, err = h.handleBlockExplorer(cli, c)
 	case c.Query("landId") != "":
 		raw, err = cli.Evaluate("GetOffersForLand", callerID, c.Query("landId"))
 	case plotID != "":
@@ -86,13 +92,11 @@ func (h *LandHandler) PostAction(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "invalid JSON: " + err.Error()})
 		return
 	}
-
 	cli, callerID := h.getClient(c)
 	if cli == nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: "backend not ready"})
 		return
 	}
-
 	switch req.Action {
 	case "register":
 		h.handleRegister(cli, c, &req)
@@ -224,4 +228,90 @@ func (h *LandHandler) handleRejectTransaction(cli *fabric.Client, cid string, c 
 		return
 	}
 	c.JSON(http.StatusOK, models.APIResponse{Success: true})
+}
+
+// ── Block Explorer ─────────────────────────────────────────────────
+
+// blockInfo is a human-readable block summary.
+type blockInfo struct {
+	Number       uint64   `json:"number"`
+	TxCount      int      `json:"txCount"`
+	DataHash     string   `json:"dataHash"`
+	PrevHash     string   `json:"prevHash"`
+	Transactions []txInfo `json:"transactions,omitempty"`
+	Timestamp    string   `json:"timestamp,omitempty"`
+}
+
+type txInfo struct {
+	TxID      string `json:"txId"`
+	Chaincode string `json:"chaincode,omitempty"`
+	Action    string `json:"action,omitempty"`
+	Creator   string `json:"creator,omitempty"`
+}
+
+type explorerData struct {
+	Height uint64      `json:"height"`
+	Blocks []blockInfo `json:"blocks"`
+}
+
+func (h *LandHandler) handleBlockExplorer(cli *fabric.Client, c *gin.Context) ([]byte, error) {
+	chainInfoRaw, err := cli.EvaluateQSCC("GetChainInfo", "mychannel")
+	if err != nil {
+		return nil, fmt.Errorf("chain info: %w", err)
+	}
+	info := &common.BlockchainInfo{}
+	if err := proto.Unmarshal(chainInfoRaw, info); err != nil {
+		return nil, fmt.Errorf("unmarshal chain info: %w", err)
+	}
+
+	height := info.Height
+	limit := 10
+	n := c.Query("blocks")
+	if n != "" {
+		if v, err := strconv.Atoi(n); err == nil && v > 0 && v < 100 {
+			limit = v
+		}
+	}
+
+	start := uint64(0)
+	if height > uint64(limit) {
+		start = height - uint64(limit)
+	}
+
+	var blocks []blockInfo
+	for i := start; i < height; i++ {
+		blockRaw, err := cli.EvaluateQSCC("GetBlockByNumber", "mychannel", strconv.FormatUint(i, 10))
+		if err != nil {
+			continue
+		}
+		block := &common.Block{}
+		if err := proto.Unmarshal(blockRaw, block); err != nil {
+			continue
+		}
+		bi := blockInfo{
+			Number:   block.Header.Number,
+			DataHash: fmt.Sprintf("%x", block.Header.DataHash),
+			PrevHash: fmt.Sprintf("%x", block.Header.PreviousHash),
+		}
+		for _, data := range block.Data.Data {
+			env := &common.Envelope{}
+			if err := proto.Unmarshal(data, env); err != nil {
+				continue
+			}
+			payload := &common.Payload{}
+			if err := proto.Unmarshal(env.Payload, payload); err != nil {
+				continue
+			}
+			chdr := &common.ChannelHeader{}
+			if err := proto.Unmarshal(payload.Header.ChannelHeader, chdr); err != nil {
+				continue
+			}
+			bi.TxCount++
+			bi.Transactions = append(bi.Transactions, txInfo{TxID: chdr.TxId})
+		}
+		blocks = append(blocks, bi)
+	}
+
+	result := explorerData{Height: height, Blocks: blocks}
+	return json.Marshal(result)
 }

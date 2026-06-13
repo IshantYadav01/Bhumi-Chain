@@ -13,7 +13,7 @@ ok()  { echo -e "${GREEN}[✓]${NC} $1"; }
 # Helper: run a peer CLI command targeting a specific peer index (0, 1, 2)
 peer_at() {
     local i=$1; shift
-    local peer="peer${i}" msp="LandRegMSP"
+    local peer="peer${i}" msp="LandregMSP"
     local p=$((7051+i*1000))
     local mspdir="/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/landreg.com/users/Admin@landreg.com/msp"
     local tls="/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/landreg.com/peers/${peer}.landreg.com/tls/ca.crt"
@@ -49,7 +49,7 @@ docker run --rm -v "$(pwd):/work:Z" -w /work -e FABRIC_CFG_PATH=/work hyperledge
 docker run --rm -v "$(pwd):/work:Z" -w /work -e FABRIC_CFG_PATH=/work hyperledger/fabric-tools:2.5 \
     configtxgen -profile LandChannel -outputCreateChannelTx /work/channel-artifacts/channel.tx -channelID mychannel
 docker run --rm -v "$(pwd):/work:Z" -w /work -e FABRIC_CFG_PATH=/work hyperledger/fabric-tools:2.5 \
-    configtxgen -profile LandChannel -outputAnchorPeersUpdate /work/channel-artifacts/LandRegMSPanchors.tx -channelID mychannel -asOrg LandRegMSP
+    configtxgen -profile LandChannel -outputAnchorPeersUpdate /work/channel-artifacts/LandregMSPanchors.tx -channelID mychannel -asOrg LandregMSP
 ok "Artifacts done"
 
 log "Starting network..."
@@ -70,11 +70,11 @@ for i in 0 1 2; do
 done
 
 peer_at 0 channel update -o orderer.landreg.com:7050 -c mychannel --ordererTLSHostnameOverride orderer.landreg.com \
-    -f /opt/gopath/src/github.com/hyperledger/fabric/peer/channel-artifacts/LandRegMSPanchors.tx --tls --cafile "${ORDERER_CA}" 2>&1 | tail -1
+    -f /opt/gopath/src/github.com/hyperledger/fabric/peer/channel-artifacts/LandregMSPanchors.tx --tls --cafile "${ORDERER_CA}" 2>&1 | tail -1
 ok "Anchors updated"
 
 log "Deploying chaincode..."
-CC="landreg"; CV="1.0"; CS=1; CL="${CC}_${CV}"
+CC="landreg"; CV="3.0"; CS=1; CL="${CC}_${CV}"
 docker exec cli peer lifecycle chaincode package ${CC}.tar.gz \
     --path /opt/gopath/src/github.com/hyperledger/fabric/peer/chaincode/go/landreg --lang golang --label ${CL} 2>&1 | tail -1
 
