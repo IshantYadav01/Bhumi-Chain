@@ -1,41 +1,22 @@
 ---
 Organizations:
-  - &Province1
-    Name: Province1MSP
-    ID: Province1MSP
-    MSPDir: organizations/peerOrganizations/province1.example.com/msp
+  - &LandReg
+    Name: LandRegMSP
+    ID: LandRegMSP
+    MSPDir: organizations/peerOrganizations/landreg.com/msp
     Policies:
-      Readers: { Type: Signature, Rule: "OR('Province1MSP.admin','Province1MSP.peer','Province1MSP.client')" }
-      Writers: { Type: Signature, Rule: "OR('Province1MSP.admin','Province1MSP.client')" }
-      Admins: { Type: Signature, Rule: "OR('Province1MSP.admin')" }
-      Endorsement: { Type: Signature, Rule: "OR('Province1MSP.peer')" }
+      Readers:
+        {
+          Type: Signature,
+          Rule: "OR('LandRegMSP.admin','LandRegMSP.peer','LandRegMSP.client')",
+        }
+      Writers:
+        { Type: Signature, Rule: "OR('LandRegMSP.admin','LandRegMSP.client')" }
+      Admins: { Type: Signature, Rule: "OR('LandRegMSP.admin')" }
+      Endorsement: { Type: Signature, Rule: "OR('LandRegMSP.peer')" }
     AnchorPeers:
-      - Host: peer0.province1.example.com
+      - Host: peer0.landreg.com
         Port: 7051
-  - &Province2
-    Name: Province2MSP
-    ID: Province2MSP
-    MSPDir: organizations/peerOrganizations/province2.example.com/msp
-    Policies:
-      Readers: { Type: Signature, Rule: "OR('Province2MSP.admin','Province2MSP.peer','Province2MSP.client')" }
-      Writers: { Type: Signature, Rule: "OR('Province2MSP.admin','Province2MSP.client')" }
-      Admins: { Type: Signature, Rule: "OR('Province2MSP.admin')" }
-      Endorsement: { Type: Signature, Rule: "OR('Province2MSP.peer')" }
-    AnchorPeers:
-      - Host: peer0.province2.example.com
-        Port: 8051
-  - &Province3
-    Name: Province3MSP
-    ID: Province3MSP
-    MSPDir: organizations/peerOrganizations/province3.example.com/msp
-    Policies:
-      Readers: { Type: Signature, Rule: "OR('Province3MSP.admin','Province3MSP.peer','Province3MSP.client')" }
-      Writers: { Type: Signature, Rule: "OR('Province3MSP.admin','Province3MSP.client')" }
-      Admins: { Type: Signature, Rule: "OR('Province3MSP.admin')" }
-      Endorsement: { Type: Signature, Rule: "OR('Province3MSP.peer')" }
-    AnchorPeers:
-      - Host: peer0.province3.example.com
-        Port: 9051
 Capabilities:
   Channel: &ChannelCapabilities { V2_0: true }
   Orderer: &OrdererCapabilities { V2_0: true }
@@ -47,19 +28,20 @@ Application: &ApplicationDefaults
     Writers: { Type: ImplicitMeta, Rule: "ANY Writers" }
     Admins: { Type: ImplicitMeta, Rule: "MAJORITY Admins" }
     LifecycleEndorsement: { Type: ImplicitMeta, Rule: "MAJORITY Endorsement" }
-    Endorsement: { Type: Signature, Rule: "OutOf(3, 'Province1MSP.peer', 'Province2MSP.peer', 'Province3MSP.peer')" }
+    Endorsement: { Type: Signature, Rule: "OutOf(2, 'LandRegMSP.peer')" }
   Capabilities: *ApplicationCapabilities
 Orderer: &OrdererDefaults
   OrdererType: etcdraft
   EtcdRaft:
     Consenters:
-      - Host: orderer.example.com
+      - Host: orderer.landreg.com
         Port: 7050
-        ClientTLSCert: organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
-        ServerTLSCert: organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
-  Addresses: [orderer.example.com:7050]
+        ClientTLSCert: organizations/ordererOrganizations/landreg.com/orderers/orderer.landreg.com/tls/server.crt
+        ServerTLSCert: organizations/ordererOrganizations/landreg.com/orderers/orderer.landreg.com/tls/server.crt
+  Addresses: [orderer.landreg.com:7050]
   BatchTimeout: 2s
-  BatchSize: { MaxMessageCount: 10, AbsoluteMaxBytes: 99 MB, PreferredMaxBytes: 512 KB }
+  BatchSize:
+    { MaxMessageCount: 10, AbsoluteMaxBytes: 99 MB, PreferredMaxBytes: 512 KB }
   Organizations:
   Policies:
     Readers: { Type: ImplicitMeta, Rule: "ANY Readers" }
@@ -82,26 +64,22 @@ Profiles:
         - &OrdererOrg
           Name: OrdererOrg
           ID: OrdererMSP
-          MSPDir: organizations/ordererOrganizations/example.com/msp
+          MSPDir: organizations/ordererOrganizations/landreg.com/msp
           Policies:
             Readers: { Type: Signature, Rule: "OR('OrdererMSP.member')" }
             Writers: { Type: Signature, Rule: "OR('OrdererMSP.member')" }
             Admins: { Type: Signature, Rule: "OR('OrdererMSP.admin')" }
-          OrdererEndpoints: [orderer.example.com:7050]
+          OrdererEndpoints: [orderer.landreg.com:7050]
       Capabilities: *OrdererCapabilities
     Consortiums:
       LandConsortium:
         Organizations:
-          - *Province1
-          - *Province2
-          - *Province3
+          - *LandReg
   LandChannel:
     Consortium: LandConsortium
     <<: *ChannelDefaults
     Application:
       <<: *ApplicationDefaults
       Organizations:
-        - *Province1
-        - *Province2
-        - *Province3
+        - *LandReg
       Capabilities: *ApplicationCapabilities

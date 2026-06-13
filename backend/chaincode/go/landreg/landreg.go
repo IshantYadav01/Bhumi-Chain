@@ -1,17 +1,10 @@
 /*
- * landreg.go — Land Registry chaincode with on-chain auth & RBAC.
+ * landreg.go — Private Land Registry Chaincode
  *
- * 3 provincial governing bodies run full nodes (test).
- * 77 malpots, municipalities, survey depts, buyers, sellers are lite nodes.
- * Land transfers endorsed by all 3 provincial peers.
- *
- * ── On-chain RBAC ──────────────────────────────────────────────────
- * Every identity is registered on-chain with roles.
- * Transaction functions check the caller's MSP certificate to extract
- * their Common Name, look up their on-chain User record, and enforce
- * role-based access before any state change.
- *
- * Roles: admin, malpot, official, seller, buyer, bank, court, surveyor
+ * 1 organization (LandReg), 3 peers, OutOf(2) endorsement.
+ * Admin users are internal Fabric identities (OU=admin).
+ * Customers are external web users — their identity is passed
+ * as a function parameter from the backend.
  */
 
 package main
@@ -25,52 +18,23 @@ import (
 	"github.com/hyperledger/fabric-contract-api-go/v2/contractapi"
 )
 
-// ── Roles ─────────────────────────────────────────────────────────────
-
 const (
-	RoleAdmin    = "admin"
-	RoleMalpot   = "malpot"
-	RoleOfficial = "official"
-	RoleSeller   = "seller"
-	RoleBuyer    = "buyer"
-	RoleSurveyor = "surveyor"
+	ListingKeyPrefix = "LISTING_"
+	OfferKeyPrefix   = "OFFER_"
+	TxKeyPrefix      = "TX_"
 )
 
-// ── On-chain user record ──────────────────────────────────────────────
-
-// UserKeyPrefix prefixes world-state keys for user records.
-const UserKeyPrefix = "USER_"
-
-// SaleProposalPrefix prefixes world-state keys for sale proposals.
-const SaleProposalPrefix = "SALE_"
-
-// User is stored on-chain to hold a lite-node's roles.
-type User struct {
-	ID        string   `json:"id"`    // CN from MSP cert, e.g. "User1@province1.example.com"
-	Name      string   `json:"name"`  // display name, e.g. "Rajesh Kumar"
-	Roles     []string `json:"roles"` // ["seller","buyer"]
-	Org       string   `json:"org"`   // derived from MSP ID, e.g. "province1"
-	Active    bool     `json:"active"`
-	CreatedAt string   `json:"createdAt"`
-	UpdatedAt string   `json:"updatedAt,omitempty"`
-}
-
-// ── Land record types (unchanged) ─────────────────────────────────────
-
 type LandRecord struct {
-	PlotID         string          `json:"plotId"`
-	SurveyNumber   string          `json:"surveyNumber"`
-	Owner          string          `json:"owner"`
-	PreviousOwner  string          `json:"previousOwner"`
-	Location       string          `json:"location"`
-	Province       string          `json:"province"`
-	Area           float64         `json:"area"`
-	LandType       string          `json:"landType"`
-	Status         string          `json:"status"`
-	ParentPlotID   string          `json:"parentPlotId,omitempty"`
-	TransferCount  int             `json:"transferCount"`
-	LastTransfer   *TransferRecord `json:"lastTransfer,omitempty"`
-	RegisteredDate string          `json:"registeredDate"`
+	ID            string          `json:"id"`
+	Owner         string          `json:"owner"`
+	Location      string          `json:"location"`
+	Area          float64         `json:"area"`
+	Status        string          `json:"status"` // "active", "listed", "sold"
+	Price         float64         `json:"price,omitempty"`
+	PreviousOwner string          `json:"previousOwner,omitempty"`
+	TransferCount int             `json:"transferCount"`
+	LastTransfer  *TransferRecord `json:"lastTransfer,omitempty"`
+	RegisteredAt  string          `json:"registeredAt"`
 }
 
 type TransferRecord struct {
@@ -81,396 +45,295 @@ type TransferRecord struct {
 	TxID  string  `json:"txId"`
 }
 
-// SaleProposal represents a multi-party approved land sale.
-type SaleProposal struct {
-	ID           string          `json:"id"`
-	PlotID       string          `json:"plotId"`
-	Seller       string          `json:"seller"`
-	Buyer        string          `json:"buyer"`
-	Price        float64         `json:"price"`
-	Status       string          `json:"status"`    // "pending", "approved", "rejected", "executed"
-	Approvals    map[string]bool `json:"approvals"` // "municipality","survey","malpot" → true/false
-	RejectReason string          `json:"rejectReason,omitempty"`
-	CreatedAt    string          `json:"createdAt"`
-	ExecutedAt   string          `json:"executedAt,omitempty"`
+type SaleListing struct {
+	ID        string  `json:"id"`
+	LandID    string  `json:"landId"`
+	Seller    string  `json:"seller"`
+	Price     float64 `json:"price"`
+	Status    string  `json:"status"`
+	CreatedAt string  `json:"createdAt"`
+}
+
+type BuyerOffer struct {
+	ID           string  `json:"id"`
+	ListingID    string  `json:"listingId"`
+	LandID       string  `json:"landId"`
+	Buyer        string  `json:"buyer"`
+	OfferedPrice float64 `json:"offeredPrice"`
+	Status       string  `json:"status"`
+	CreatedAt    string  `json:"createdAt"`
+}
+
+type Transaction struct {
+	ID          string  `json:"id"`
+	LandID      string  `json:"landId"`
+	Seller      string  `json:"seller"`
+	Buyer       string  `json:"buyer"`
+	Price       float64 `json:"price"`
+	Status      string  `json:"status"` // "pending_buyer_confirm", "pending_admin", "completed", "rejected"
+	CreatedAt   string  `json:"createdAt"`
+	CompletedAt string  `json:"completedAt,omitempty"`
 }
 
 type SmartContract struct {
 	contractapi.Contract
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  User management (admin only)
-// ═══════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════
+//  Admin functions (identity from cert OU)
+// ══════════════════════════════════════════════════════════════════════
 
-// RegisterUser creates an on-chain user record.
-// Requires admin role, EXCEPT for the very first user (bootstrap).
-// The userID must match the CN from the X.509 certificate that the user
-// will present when transacting — e.g. "User1@province1.example.com".
-func (s *SmartContract) RegisterUser(
-	ctx contractapi.TransactionContextInterface,
-	userID, name, rolesJSON string,
-) error {
-	// ── Bootstrap: if no admin exists yet, allow first registration ─
-	hasAdmin, err := s.hasAnyAdmin(ctx)
-	if err != nil {
-		return err
-	}
-	if hasAdmin {
-		if _, err := s.requireCaller(ctx, RoleAdmin); err != nil {
-			return err
-		}
-	}
-
-	if userID == "" {
-		return fmt.Errorf("userID is required")
-	}
-	if name == "" {
-		return fmt.Errorf("name is required")
-	}
-
-	var roles []string
-	if err := json.Unmarshal([]byte(rolesJSON), &roles); err != nil {
-		return fmt.Errorf("invalid roles JSON: %w", err)
-	}
-	if len(roles) == 0 {
-		return fmt.Errorf("at least one role is required")
-	}
-
-	key := UserKeyPrefix + userID
-	exists, err := s.stateExists(ctx, key)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return fmt.Errorf("user %s already registered", userID)
-	}
-
-	user := User{
-		ID:        userID,
-		Name:      name,
-		Roles:     roles,
-		Org:       s.orgFromUserID(userID),
-		Active:    true,
-		CreatedAt: now(),
-	}
-	return s.putUser(ctx, &user)
-}
-
-// UpdateUserRoles changes a user's roles (admin only).
-func (s *SmartContract) UpdateUserRoles(
-	ctx contractapi.TransactionContextInterface,
-	userID, rolesJSON string,
-) error {
-	if _, err := s.requireCaller(ctx, RoleAdmin); err != nil {
-		return err
-	}
-
-	user, err := s.getUser(ctx, userID)
-	if err != nil {
-		return err
-	}
-
-	var roles []string
-	if err := json.Unmarshal([]byte(rolesJSON), &roles); err != nil {
-		return fmt.Errorf("invalid roles JSON: %w", err)
-	}
-	if len(roles) == 0 {
-		return fmt.Errorf("at least one role is required")
-	}
-
-	user.Roles = roles
-	user.UpdatedAt = now()
-	return s.putUser(ctx, user)
-}
-
-// DeactivateUser disables a user (admin only).  The record stays on-chain.
-func (s *SmartContract) DeactivateUser(
-	ctx contractapi.TransactionContextInterface,
-	userID string,
-) error {
-	if _, err := s.requireCaller(ctx, RoleAdmin); err != nil {
-		return err
-	}
-
-	user, err := s.getUser(ctx, userID)
-	if err != nil {
-		return err
-	}
-	user.Active = false
-	user.UpdatedAt = now()
-	return s.putUser(ctx, user)
-}
-
-// ActivateUser re-enables a deactivated user (admin only).
-func (s *SmartContract) ActivateUser(
-	ctx contractapi.TransactionContextInterface,
-	userID string,
-) error {
-	if _, err := s.requireCaller(ctx, RoleAdmin); err != nil {
-		return err
-	}
-
-	user, err := s.getUser(ctx, userID)
-	if err != nil {
-		return err
-	}
-	user.Active = true
-	user.UpdatedAt = now()
-	return s.putUser(ctx, user)
-}
-
-// GetUser returns the on-chain user record.  Anyone can query their own
-// record; admins can query anyone's.
-func (s *SmartContract) GetUser(
-	ctx contractapi.TransactionContextInterface,
-	userID string,
-) (string, error) {
-	caller, err := s.callerCN(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	// Normal users can only see their own record.
-	if caller != userID {
-		if _, err := s.getCallerRole(ctx, RoleAdmin); err != nil {
-			return "", fmt.Errorf("can only query your own user record")
-		}
-	}
-
-	user, err := s.getUser(ctx, userID)
-	if err != nil {
-		return "", err
-	}
-	b, _ := json.Marshal(user)
-	return string(b), nil
-}
-
-// GetAllUsers returns all on-chain users (admin only).
-func (s *SmartContract) GetAllUsers(
-	ctx contractapi.TransactionContextInterface,
-) (string, error) {
-	if _, err := s.requireCaller(ctx, RoleAdmin); err != nil {
-		return "", err
-	}
-
-	var users []*User
-	iter, err := ctx.GetStub().GetStateByRange(UserKeyPrefix, UserKeyPrefix+"~")
-	if err != nil {
-		return "", err
-	}
-	defer iter.Close()
-	for iter.HasNext() {
-		kv, err := iter.Next()
-		if err != nil {
-			return "", err
-		}
-		var u User
-		if err := json.Unmarshal(kv.Value, &u); err != nil {
-			continue
-		}
-		users = append(users, &u)
-	}
-	b, _ := json.Marshal(users)
-	return string(b), nil
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-//  Land registration
-// ═══════════════════════════════════════════════════════════════════════
-
-// RegisterLand creates a new land record.  Only malpot, official, or
-// admin may register land.  The owner field specifies who owns the land —
-// it does not need to be the caller.
 func (s *SmartContract) RegisterLand(
 	ctx contractapi.TransactionContextInterface,
-	plotID, surveyNumber, owner, location, province string,
-	area float64, landType string,
+	id, owner, location string, area float64,
 ) error {
-	if _, err := s.requireCaller(ctx, RoleMalpot, RoleOfficial, RoleAdmin); err != nil {
-		return fmt.Errorf("unauthorized: %w", err)
+	if !s.isAdmin(ctx) {
+		return fmt.Errorf("only admin can register land")
 	}
-
-	exists, err := s.landExists(ctx, plotID)
+	exists, err := s.landExists(ctx, id)
 	if err != nil {
 		return err
 	}
 	if exists {
-		return fmt.Errorf("plot %s already registered", plotID)
+		return fmt.Errorf("land %s already exists", id)
 	}
-
-	record := LandRecord{
-		PlotID: plotID, SurveyNumber: surveyNumber,
-		Owner: owner, Location: location, Province: province,
-		Area: area, LandType: landType, Status: "active",
-		RegisteredDate: now(),
-	}
-	return s.putLand(ctx, &record)
+	return s.putLand(ctx, &LandRecord{
+		ID: id, Owner: owner, Location: location, Area: area,
+		Status: "active", RegisteredAt: now(),
+	})
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  Split
-// ═══════════════════════════════════════════════════════════════════════
-
-func (s *SmartContract) SplitLand(
-	ctx contractapi.TransactionContextInterface,
-	parentPlotID string,
-	childPlotsJSON string,
+func (s *SmartContract) AdminApproveTransaction(
+	ctx contractapi.TransactionContextInterface, txID string,
 ) error {
-	caller, err := s.callerCN(ctx)
+	if !s.isAdmin(ctx) {
+		return fmt.Errorf("only admin can approve transactions")
+	}
+	tx, err := s.getTransaction(ctx, txID)
 	if err != nil {
 		return err
 	}
+	if tx.Status != "pending_admin" {
+		return fmt.Errorf("transaction %s is %s — must be pending_admin", txID, tx.Status)
+	}
 
-	parent, err := s.getLand(ctx, parentPlotID)
+	listing, _ := s.getListing(ctx, tx.LandID)
+	listing.Status = "completed"
+	_ = s.putListing(ctx, listing)
+
+	record, err := s.getLand(ctx, tx.LandID)
 	if err != nil {
 		return err
 	}
-	// ── Authorization ──────────────────────────────────────────────
-	if parent.Owner != caller {
-		return fmt.Errorf("only the current owner (%s) can split this land", parent.Owner)
+	txIDOnChain := ctx.GetStub().GetTxID()
+	record.PreviousOwner = record.Owner
+	record.Owner = tx.Buyer
+	record.TransferCount++
+	record.LastTransfer = &TransferRecord{
+		From: record.PreviousOwner, To: tx.Buyer,
+		Price: tx.Price, Date: now(), TxID: txIDOnChain,
 	}
-
-	type ChildSpec struct {
-		PlotID string  `json:"plotId"`
-		Owner  string  `json:"owner"`
-		Area   float64 `json:"area"`
-	}
-	var children []ChildSpec
-	if err := json.Unmarshal([]byte(childPlotsJSON), &children); err != nil {
-		return fmt.Errorf("bad child plots JSON: %w", err)
-	}
-	if len(children) < 2 {
-		return fmt.Errorf("split needs at least 2 child plots")
-	}
-
-	var total float64
-	for _, c := range children {
-		if c.Area <= 0 {
-			return fmt.Errorf("child %s has invalid area", c.PlotID)
-		}
-		exists, _ := s.landExists(ctx, c.PlotID)
-		if exists {
-			return fmt.Errorf("child %s already exists", c.PlotID)
-		}
-		total += c.Area
-	}
-	if total > parent.Area {
-		return fmt.Errorf("child total area %.2f > parent area %.2f", total, parent.Area)
-	}
-
-	parent.Status = "split"
-	if err := s.putLand(ctx, parent); err != nil {
+	record.Status = "active"
+	record.Price = 0
+	if err := s.putLand(ctx, record); err != nil {
 		return err
 	}
 
-	for _, c := range children {
-		child := LandRecord{
-			PlotID: c.PlotID, SurveyNumber: parent.SurveyNumber,
-			Owner: c.Owner, Location: parent.Location,
-			Province: parent.Province, Area: c.Area,
-			LandType: parent.LandType, Status: "active",
-			ParentPlotID:   parentPlotID,
-			RegisteredDate: now(),
+	tx.Status = "completed"
+	tx.CompletedAt = now()
+	return s.putTransaction(ctx, tx)
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Customer functions (identity passed as `caller` param)
+// ══════════════════════════════════════════════════════════════════════
+
+func (s *SmartContract) ListForSale(
+	ctx contractapi.TransactionContextInterface,
+	caller, landID string, price float64,
+) error {
+	if caller == "" {
+		return fmt.Errorf("caller identity required")
+	}
+	record, err := s.getLand(ctx, landID)
+	if err != nil {
+		return err
+	}
+	if record.Owner != caller {
+		return fmt.Errorf("only the owner can list land for sale")
+	}
+	if price <= 0 {
+		return fmt.Errorf("price must be positive")
+	}
+	record.Status = "listed"
+	record.Price = price
+	if err := s.putLand(ctx, record); err != nil {
+		return err
+	}
+	return s.putListing(ctx, &SaleListing{
+		ID: ListingKeyPrefix + landID, LandID: landID,
+		Seller: caller, Price: price, Status: "active", CreatedAt: now(),
+	})
+}
+
+func (s *SmartContract) CancelListing(
+	ctx contractapi.TransactionContextInterface, caller, landID string,
+) error {
+	if caller == "" {
+		return fmt.Errorf("caller identity required")
+	}
+	record, err := s.getLand(ctx, landID)
+	if err != nil {
+		return err
+	}
+	if record.Owner != caller {
+		return fmt.Errorf("only the owner can cancel a listing")
+	}
+	listing, err := s.getListing(ctx, landID)
+	if err != nil {
+		return err
+	}
+	if listing.Status != "active" {
+		return fmt.Errorf("listing is not active")
+	}
+	record.Status = "active"
+	record.Price = 0
+	if err := s.putLand(ctx, record); err != nil {
+		return err
+	}
+	listing.Status = "cancelled"
+	return s.putListing(ctx, listing)
+}
+
+func (s *SmartContract) MakeOffer(
+	ctx contractapi.TransactionContextInterface,
+	caller, landID string, offeredPrice float64,
+) (string, error) {
+	if caller == "" {
+		return "", fmt.Errorf("caller identity required")
+	}
+	record, err := s.getLand(ctx, landID)
+	if err != nil {
+		return "", err
+	}
+	if record.Status != "listed" {
+		return "", fmt.Errorf("land %s is not listed", landID)
+	}
+	if record.Owner == caller {
+		return "", fmt.Errorf("cannot offer on your own land")
+	}
+	if offeredPrice <= 0 {
+		return "", fmt.Errorf("price must be positive")
+	}
+	existing, _ := s.findOffers(ctx, landID, caller)
+	for _, o := range existing {
+		if o.Status == "pending" {
+			return "", fmt.Errorf("you already have a pending offer")
 		}
-		if err := s.putLand(ctx, &child); err != nil {
-			return err
+	}
+	offer := &BuyerOffer{
+		ID: OfferKeyPrefix + landID + "_" + caller, ListingID: ListingKeyPrefix + landID,
+		LandID: landID, Buyer: caller, OfferedPrice: offeredPrice,
+		Status: "pending", CreatedAt: now(),
+	}
+	if err := s.putOffer(ctx, offer); err != nil {
+		return "", err
+	}
+	return offer.ID, nil
+}
+
+func (s *SmartContract) AcceptOffer(
+	ctx contractapi.TransactionContextInterface, caller, offerID string,
+) error {
+	if caller == "" {
+		return fmt.Errorf("caller identity required")
+	}
+	offer, err := s.getOfferByID(ctx, offerID)
+	if err != nil {
+		return err
+	}
+	if offer.Status != "pending" {
+		return fmt.Errorf("offer %s is %s", offerID, offer.Status)
+	}
+	record, err := s.getLand(ctx, offer.LandID)
+	if err != nil {
+		return err
+	}
+	if record.Owner != caller {
+		return fmt.Errorf("only the owner can accept offers")
+	}
+	offer.Status = "accepted"
+	if err := s.putOffer(ctx, offer); err != nil {
+		return err
+	}
+	allOffers, _ := s.findAllOffersForLand(ctx, offer.LandID)
+	for _, o := range allOffers {
+		if o.ID != offerID && o.Status == "pending" {
+			o.Status = "rejected"
+			_ = s.putOffer(ctx, o)
 		}
 	}
-	return nil
+	listing, _ := s.getListing(ctx, offer.LandID)
+	listing.Status = "pending"
+	_ = s.putListing(ctx, listing)
+	return s.putTransaction(ctx, &Transaction{
+		ID: TxKeyPrefix + offer.LandID, LandID: offer.LandID,
+		Seller: caller, Buyer: offer.Buyer,
+		Price: offer.OfferedPrice, Status: "pending_buyer_confirm", CreatedAt: now(),
+	})
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  Queries (read-only)
-// ═══════════════════════════════════════════════════════════════════════
-
-// QueryLand returns a single land record by plot ID.
-// Any authenticated user can query.
-func (s *SmartContract) QueryLand(ctx contractapi.TransactionContextInterface, plotID string) (string, error) {
-	if _, err := s.requireAnyUser(ctx); err != nil {
-		return "", fmt.Errorf("unauthorized: %w", err)
+func (s *SmartContract) ConfirmTransaction(
+	ctx contractapi.TransactionContextInterface, caller, txID string,
+) error {
+	if caller == "" {
+		return fmt.Errorf("caller identity required")
 	}
-	r, err := s.getLand(ctx, plotID)
+	tx, err := s.getTransaction(ctx, txID)
 	if err != nil {
-		return "", err
+		return err
 	}
-	b, err := json.Marshal(r)
-	return string(b), err
+	if tx.Buyer != caller {
+		return fmt.Errorf("only the buyer can confirm")
+	}
+	if tx.Status != "pending_buyer_confirm" {
+		return fmt.Errorf("cannot confirm in %s state", tx.Status)
+	}
+	tx.Status = "pending_admin"
+	return s.putTransaction(ctx, tx)
 }
 
-// GetLandByOwner returns all land records for a given owner.
-//
-// Access: Normal users can only query their OWN records (owner == caller).
-// Admins, officials, and malpots can query any owner.
-func (s *SmartContract) GetLandByOwner(ctx contractapi.TransactionContextInterface, owner string) (string, error) {
-	callerUser, err := s.requireAnyUser(ctx)
+func (s *SmartContract) RejectTransaction(
+	ctx contractapi.TransactionContextInterface, caller, txID string,
+) error {
+	if caller == "" {
+		return fmt.Errorf("caller identity required")
+	}
+	tx, err := s.getTransaction(ctx, txID)
 	if err != nil {
-		return "", fmt.Errorf("unauthorized: %w", err)
+		return err
 	}
-
-	// Restrict: normal users can only see their own land.
-	if !s.hasRole(callerUser, RoleAdmin, RoleOfficial, RoleMalpot) {
-		if owner != callerUser.ID && owner != callerUser.Name {
-			return "", fmt.Errorf("you can only query your own land records")
-		}
+	if tx.Seller != caller && tx.Buyer != caller {
+		return fmt.Errorf("only seller or buyer can reject")
 	}
-
-	records, err := s.filterLand(ctx, func(r *LandRecord) bool { return r.Owner == owner })
-	if err != nil {
-		return "", err
+	if tx.Status == "completed" {
+		return fmt.Errorf("cannot reject completed transaction")
 	}
-	b, _ := json.Marshal(records)
-	return string(b), nil
+	tx.Status = "rejected"
+	listing, _ := s.getListing(ctx, tx.LandID)
+	listing.Status = "active"
+	_ = s.putListing(ctx, listing)
+	record, _ := s.getLand(ctx, tx.LandID)
+	record.Status = "listed"
+	_ = s.putLand(ctx, record)
+	return s.putTransaction(ctx, tx)
 }
 
-// GetLandByStatus returns land filtered by status.
-// Access: admins, officials, malpots.  Normal users cannot query by status.
-func (s *SmartContract) GetLandByStatus(ctx contractapi.TransactionContextInterface, status string) (string, error) {
-	if _, err := s.requireCaller(ctx, RoleAdmin, RoleOfficial, RoleMalpot); err != nil {
-		return "", fmt.Errorf("unauthorized: %w", err)
-	}
-	records, err := s.filterLand(ctx, func(r *LandRecord) bool { return r.Status == status })
-	if err != nil {
-		return "", err
-	}
-	b, _ := json.Marshal(records)
-	return string(b), nil
-}
+// ══════════════════════════════════════════════════════════════════════
+//  Queries
+// ══════════════════════════════════════════════════════════════════════
 
-// GetLandByProvince returns all land in a province.
-// Any authenticated user can query.
-func (s *SmartContract) GetLandByProvince(ctx contractapi.TransactionContextInterface, province string) (string, error) {
-	if _, err := s.requireAnyUser(ctx); err != nil {
-		return "", fmt.Errorf("unauthorized: %w", err)
-	}
-	records, err := s.filterLand(ctx, func(r *LandRecord) bool { return r.Province == province })
-	if err != nil {
-		return "", err
-	}
-	b, _ := json.Marshal(records)
-	return string(b), nil
-}
-
-// GetChildrenOf returns child plots of a split parent.
-// Any authenticated user can query.
-func (s *SmartContract) GetChildrenOf(ctx contractapi.TransactionContextInterface, parentPlotID string) (string, error) {
-	if _, err := s.requireAnyUser(ctx); err != nil {
-		return "", fmt.Errorf("unauthorized: %w", err)
-	}
-	records, err := s.filterLand(ctx, func(r *LandRecord) bool { return r.ParentPlotID == parentPlotID })
-	if err != nil {
-		return "", err
-	}
-	b, _ := json.Marshal(records)
-	return string(b), nil
-}
-
-// GetAllLand returns every land record.
-// Access: admins, officials, and malpots only (privacy).
 func (s *SmartContract) GetAllLand(ctx contractapi.TransactionContextInterface) (string, error) {
-	if _, err := s.requireCaller(ctx, RoleAdmin, RoleOfficial, RoleMalpot); err != nil {
-		return "", fmt.Errorf("unauthorized: %w", err)
-	}
 	records, err := s.filterLand(ctx, func(r *LandRecord) bool { return true })
 	if err != nil {
 		return "", err
@@ -479,490 +342,111 @@ func (s *SmartContract) GetAllLand(ctx contractapi.TransactionContextInterface) 
 	return string(b), nil
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  Multi-party sale proposal workflow
-// ═══════════════════════════════════════════════════════════════════════
-
-// InitiateSaleProposal starts a new multi-party sale proposal.
-// Only a user with RoleSeller who owns the land can initiate.
-func (s *SmartContract) InitiateSaleProposal(
-	ctx contractapi.TransactionContextInterface,
-	plotID, buyer string, price float64,
-) (string, error) {
-	user, err := s.requireAnyUser(ctx)
-	if err != nil {
-		return "", fmt.Errorf("unauthorized: %w", err)
-	}
-
-	record, err := s.getLand(ctx, plotID)
+func (s *SmartContract) QueryLand(ctx contractapi.TransactionContextInterface, id string) (string, error) {
+	r, err := s.getLand(ctx, id)
 	if err != nil {
 		return "", err
 	}
-	if record.Status != "active" {
-		return "", fmt.Errorf("land %s is not active (status: %s)", plotID, record.Status)
-	}
-	if record.Owner != user.ID {
-		return "", fmt.Errorf("only the current owner (%s) can initiate a sale proposal", record.Owner)
-	}
-
-	// Check no pending/approved proposal already exists for this plot.
-	existing, err := s.findActiveProposalForPlot(ctx, plotID)
-	if err != nil {
-		return "", err
-	}
-	if existing != nil {
-		return "", fmt.Errorf("a sale proposal already exists for plot %s (id=%s, status=%s)", plotID, existing.ID, existing.Status)
-	}
-
-	id := SaleProposalPrefix + plotID + "_" + now()
-	proposal := SaleProposal{
-		ID:        id,
-		PlotID:    plotID,
-		Seller:    user.ID,
-		Buyer:     buyer,
-		Price:     price,
-		Status:    "pending",
-		Approvals: map[string]bool{"municipality": false},
-		CreatedAt: now(),
-	}
-	if err := s.putSaleProposal(ctx, &proposal); err != nil {
-		return "", err
-	}
-	b, _ := json.Marshal(id)
+	b, _ := json.Marshal(r)
 	return string(b), nil
 }
 
-// findActiveProposalForPlot returns any existing proposal for the given plot
-// that is in "pending" or "approved" status.
-func (s *SmartContract) findActiveProposalForPlot(ctx contractapi.TransactionContextInterface, plotID string) (*SaleProposal, error) {
-	proposals, err := s.filterSaleProposals(ctx, func(p *SaleProposal) bool {
-		return p.PlotID == plotID && (p.Status == "pending" || p.Status == "approved")
-	})
-	if err != nil {
-		return nil, err
+func (s *SmartContract) GetMyLands(ctx contractapi.TransactionContextInterface, caller string) (string, error) {
+	if caller == "" {
+		return "", fmt.Errorf("caller identity required")
 	}
-	if len(proposals) > 0 {
-		return proposals[0], nil
-	}
-	return nil, nil
-}
-
-// ApproveSaleProposal allows an official (municipality) to approve a proposal.
-// Once the municipality approves, the transfer is auto-executed.
-func (s *SmartContract) ApproveSaleProposal(ctx contractapi.TransactionContextInterface, proposalID string) error {
-	_, err := s.requireCaller(ctx, RoleOfficial)
-	if err != nil {
-		return fmt.Errorf("unauthorized: %w", err)
-	}
-
-	proposal, err := s.getSaleProposal(ctx, proposalID)
-	if err != nil {
-		return err
-	}
-	if proposal.Status != "pending" && proposal.Status != "approved" {
-		return fmt.Errorf("sale proposal %s is %s — cannot approve", proposalID, proposal.Status)
-	}
-
-	if proposal.Approvals["municipality"] {
-		return fmt.Errorf("municipality already approved this proposal")
-	}
-
-	proposal.Approvals["municipality"] = true
-	proposal.Status = "approved"
-
-	// Auto-execute the transfer.
-	if err := s.executeTransfer(ctx, proposal); err != nil {
-		return err
-	}
-	proposal.Status = "executed"
-	proposal.ExecutedAt = now()
-
-	return s.putSaleProposal(ctx, proposal)
-}
-
-// callerApprovalRole maps the caller's roles to the approval role key.
-func (s *SmartContract) callerApprovalRole(user *User) string {
-	for _, r := range user.Roles {
-		if r == RoleOfficial {
-			return "municipality"
-		}
-	}
-	return ""
-}
-
-// callerApprovalRoles returns ALL approval role keys the user qualifies for.
-func (s *SmartContract) callerApprovalRoles(user *User) []string {
-	var roles []string
-	for _, r := range user.Roles {
-		if r == RoleOfficial {
-			roles = append(roles, "municipality")
-			return roles
-		}
-	}
-	return roles
-}
-
-// RejectSaleProposal allows an official (municipality) to reject a proposal.
-func (s *SmartContract) RejectSaleProposal(ctx contractapi.TransactionContextInterface, proposalID, reason string) error {
-	_, err := s.requireCaller(ctx, RoleOfficial)
-	if err != nil {
-		return fmt.Errorf("unauthorized: %w", err)
-	}
-
-	proposal, err := s.getSaleProposal(ctx, proposalID)
-	if err != nil {
-		return err
-	}
-	if proposal.Status != "pending" && proposal.Status != "approved" {
-		return fmt.Errorf("sale proposal %s is %s — cannot reject", proposalID, proposal.Status)
-	}
-
-	proposal.Status = "rejected"
-	proposal.RejectReason = reason
-	return s.putSaleProposal(ctx, proposal)
-}
-
-// ExecuteSaleProposal performs the land transfer for a municipality-approved proposal.
-// Any authenticated user can call, but municipal approval must be present.
-func (s *SmartContract) ExecuteSaleProposal(ctx contractapi.TransactionContextInterface, proposalID string) error {
-	if _, err := s.requireAnyUser(ctx); err != nil {
-		return fmt.Errorf("unauthorized: %w", err)
-	}
-
-	proposal, err := s.getSaleProposal(ctx, proposalID)
-	if err != nil {
-		return err
-	}
-	if proposal.Status != "approved" {
-		return fmt.Errorf("sale proposal %s is %s — must be 'approved' to execute", proposalID, proposal.Status)
-	}
-	if !proposal.Approvals["municipality"] {
-		return fmt.Errorf("sale proposal %s has not been approved by municipality", proposalID)
-	}
-
-	if err := s.executeTransfer(ctx, proposal); err != nil {
-		return err
-	}
-	proposal.Status = "executed"
-	proposal.ExecutedAt = now()
-	return s.putSaleProposal(ctx, proposal)
-}
-
-// executeTransfer performs the actual land ownership transfer for a proposal.
-// It mirrors the TransferLand logic but without seller-ownership checks (approvals validate).
-func (s *SmartContract) executeTransfer(ctx contractapi.TransactionContextInterface, proposal *SaleProposal) error {
-	record, err := s.getLand(ctx, proposal.PlotID)
-	if err != nil {
-		return err
-	}
-	txID := ctx.GetStub().GetTxID()
-	transfer := TransferRecord{
-		From:  record.Owner,
-		To:    proposal.Buyer,
-		Price: proposal.Price,
-		Date:  now(),
-		TxID:  txID,
-	}
-	record.PreviousOwner = record.Owner
-	record.Owner = proposal.Buyer
-	record.TransferCount++
-	record.LastTransfer = &transfer
-	return s.putLand(ctx, record)
-}
-
-// GetSaleProposal returns a single sale proposal as JSON.
-func (s *SmartContract) GetSaleProposal(ctx contractapi.TransactionContextInterface, proposalID string) (string, error) {
-	if _, err := s.requireAnyUser(ctx); err != nil {
-		return "", fmt.Errorf("unauthorized: %w", err)
-	}
-	p, err := s.getSaleProposalRecord(ctx, proposalID)
+	records, err := s.filterLand(ctx, func(r *LandRecord) bool { return r.Owner == caller })
 	if err != nil {
 		return "", err
 	}
-	b, err := json.Marshal(p)
-	return string(b), err
-}
-
-// GetPendingApprovals returns all proposals where the caller's role still needs to approve.
-func (s *SmartContract) GetPendingApprovals(ctx contractapi.TransactionContextInterface) (string, error) {
-	user, err := s.requireCaller(ctx, RoleOfficial, RoleSurveyor, RoleMalpot)
-	if err != nil {
-		return "", fmt.Errorf("unauthorized: %w", err)
-	}
-
-	role := s.callerApprovalRole(user)
-	if role == "" {
-		return "", fmt.Errorf("user %s does not hold an approver role", user.ID)
-	}
-
-	proposals, err := s.filterSaleProposals(ctx, func(p *SaleProposal) bool {
-		if p.Status != "pending" && p.Status != "approved" {
-			return false
-		}
-		approved, exists := p.Approvals[role]
-		return exists && !approved
-	})
-	if err != nil {
-		return "", err
-	}
-	b, _ := json.Marshal(proposals)
+	b, _ := json.Marshal(records)
 	return string(b), nil
 }
 
-// GetMySaleProposals returns all proposals where the caller is the seller.
-func (s *SmartContract) GetMySaleProposals(ctx contractapi.TransactionContextInterface) (string, error) {
-	user, err := s.requireAnyUser(ctx)
-	if err != nil {
-		return "", fmt.Errorf("unauthorized: %w", err)
-	}
-
-	proposals, err := s.filterSaleProposals(ctx, func(p *SaleProposal) bool {
-		return p.Seller == user.ID
-	})
+func (s *SmartContract) GetListings(ctx contractapi.TransactionContextInterface) (string, error) {
+	listings, err := s.filterListings(ctx, func(l *SaleListing) bool { return l.Status == "active" })
 	if err != nil {
 		return "", err
 	}
-	b, _ := json.Marshal(proposals)
+	b, _ := json.Marshal(listings)
 	return string(b), nil
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  Sale proposal state helpers
-// ═══════════════════════════════════════════════════════════════════════
-
-func (s *SmartContract) getSaleProposalRecord(ctx contractapi.TransactionContextInterface, id string) (*SaleProposal, error) {
-	data, err := ctx.GetStub().GetState(id)
+func (s *SmartContract) GetMyOffers(ctx contractapi.TransactionContextInterface, caller string) (string, error) {
+	if caller == "" {
+		return "", fmt.Errorf("caller identity required")
+	}
+	offers, err := s.filterOffers(ctx, func(o *BuyerOffer) bool { return o.Buyer == caller })
 	if err != nil {
-		return nil, fmt.Errorf("read sale proposal %s: %w", id, err)
+		return "", err
 	}
-	if data == nil {
-		return nil, fmt.Errorf("sale proposal %s not found", id)
-	}
-	var p SaleProposal
-	if err := json.Unmarshal(data, &p); err != nil {
-		return nil, fmt.Errorf("parse sale proposal %s: %w", id, err)
-	}
-	return &p, nil
+	b, _ := json.Marshal(offers)
+	return string(b), nil
 }
 
-func (s *SmartContract) getSaleProposal(ctx contractapi.TransactionContextInterface, id string) (*SaleProposal, error) {
-	// Proposal ID already includes the SALE_ prefix from InitiateSaleProposal.
-	return s.getSaleProposalRecord(ctx, id)
-}
-
-func (s *SmartContract) putSaleProposal(ctx contractapi.TransactionContextInterface, p *SaleProposal) error {
-	data, err := json.Marshal(p)
+func (s *SmartContract) GetOffersForLand(ctx contractapi.TransactionContextInterface, caller, landID string) (string, error) {
+	if caller == "" {
+		return "", fmt.Errorf("caller identity required")
+	}
+	record, err := s.getLand(ctx, landID)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return ctx.GetStub().PutState(p.ID, data)
-}
-
-func (s *SmartContract) filterSaleProposals(ctx contractapi.TransactionContextInterface, fn func(*SaleProposal) bool) ([]*SaleProposal, error) {
-	iter, err := ctx.GetStub().GetStateByRange(SaleProposalPrefix, SaleProposalPrefix+"~")
+	if record.Owner != caller {
+		return "", fmt.Errorf("only the owner can view offers")
+	}
+	offers, err := s.findAllOffersForLand(ctx, landID)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	defer iter.Close()
-	var results []*SaleProposal
-	for iter.HasNext() {
-		kv, err := iter.Next()
-		if err != nil {
-			return nil, err
-		}
-		var p SaleProposal
-		if err := json.Unmarshal(kv.Value, &p); err != nil {
-			return nil, err
-		}
-		if fn(&p) {
-			results = append(results, &p)
-		}
-	}
-	return results, nil
+	b, _ := json.Marshal(offers)
+	return string(b), nil
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  Auth helpers — extract & enforce caller identity
-// ═══════════════════════════════════════════════════════════════════════
+func (s *SmartContract) GetPendingTransactions(ctx contractapi.TransactionContextInterface) (string, error) {
+	if !s.isAdmin(ctx) {
+		return "", fmt.Errorf("only admin can view pending transactions")
+	}
+	txs, err := s.filterTransactions(ctx, func(t *Transaction) bool { return t.Status == "pending_admin" })
+	if err != nil {
+		return "", err
+	}
+	b, _ := json.Marshal(txs)
+	return string(b), nil
+}
 
-// callerCN extracts the Common Name from the caller's X.509 certificate.
-// This is the identity asserted by the Fabric MSP — unforgeable because
-// the peer verified the proposal signature against the cert.
-func (s *SmartContract) callerCN(ctx contractapi.TransactionContextInterface) (string, error) {
+func (s *SmartContract) GetMyTransactions(ctx contractapi.TransactionContextInterface, caller string) (string, error) {
+	if caller == "" {
+		return "", fmt.Errorf("caller identity required")
+	}
+	txs, err := s.filterTransactions(ctx, func(t *Transaction) bool { return t.Seller == caller || t.Buyer == caller })
+	if err != nil {
+		return "", err
+	}
+	b, _ := json.Marshal(txs)
+	return string(b), nil
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Auth helpers
+// ══════════════════════════════════════════════════════════════════════
+
+func (s *SmartContract) isAdmin(ctx contractapi.TransactionContextInterface) bool {
 	cert, err := ctx.GetClientIdentity().GetX509Certificate()
 	if err != nil {
-		return "", fmt.Errorf("failed to get client certificate: %w", err)
+		return false
 	}
-	cn := cert.Subject.CommonName
-	if cn == "" {
-		return "", fmt.Errorf("client certificate has no CommonName")
-	}
-	return cn, nil
-}
-
-// requireAnyUser checks that the caller is registered on-chain and active.
-// Returns the User record.  This is the minimal gate for read operations.
-func (s *SmartContract) requireAnyUser(ctx contractapi.TransactionContextInterface) (*User, error) {
-	cn, err := s.callerCN(ctx)
-	if err != nil {
-		return nil, err
-	}
-	user, err := s.getUser(ctx, cn)
-	if err != nil {
-		return nil, fmt.Errorf("identity %s not registered on-chain: %w", cn, err)
-	}
-	if !user.Active {
-		return nil, fmt.Errorf("user %s is deactivated", cn)
-	}
-	return user, nil
-}
-
-// requireCaller checks the caller has at least one of the given roles.
-// Returns the User record.
-func (s *SmartContract) requireCaller(ctx contractapi.TransactionContextInterface, roles ...string) (*User, error) {
-	user, err := s.requireAnyUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, role := range roles {
-		if s.hasRole(user, role) {
-			return user, nil
-		}
-	}
-	return nil, fmt.Errorf("user %s lacks required role (need one of: %s)", user.ID, strings.Join(roles, ","))
-}
-
-// callerHasRole returns true if the caller has the given role.
-func (s *SmartContract) callerHasRole(ctx contractapi.TransactionContextInterface, role string) bool {
-	_, err := s.requireCaller(ctx, role)
-	return err == nil
-}
-
-// callerHasAnyRole returns true if the caller has any of the given roles.
-func (s *SmartContract) callerHasAnyRole(ctx contractapi.TransactionContextInterface, roles ...string) bool {
-	_, err := s.requireCaller(ctx, roles...)
-	return err == nil
-}
-
-// getCallerRole is like requireCaller but returns only the user without error wrapping.
-func (s *SmartContract) getCallerRole(ctx contractapi.TransactionContextInterface, role string) (*User, error) {
-	user, err := s.requireAnyUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !s.hasRole(user, role) {
-		return nil, fmt.Errorf("user %s lacks role '%s'", user.ID, role)
-	}
-	return user, nil
-}
-
-// hasRole checks whether user.Roles contains any of the given roles.
-func (s *SmartContract) hasRole(user *User, roles ...string) bool {
-	for _, r := range user.Roles {
-		for _, want := range roles {
-			if r == want {
-				return true
-			}
+	for _, ou := range cert.Subject.OrganizationalUnit {
+		if ou == "admin" {
+			return true
 		}
 	}
 	return false
 }
 
-// orgFromUserID extracts the org from a user ID like "User1@province1.example.com".
-func (s *SmartContract) orgFromUserID(userID string) string {
-	// "User1@province1.example.com" → split on @ → "province1.example.com" → split on . → "province1"
-	parts := strings.SplitN(userID, "@", 2)
-	if len(parts) < 2 {
-		return ""
-	}
-	host := strings.SplitN(parts[1], ".", 2)
-	return host[0]
-}
-
-// hasAnyAdmin returns true if any user with the admin role exists on-chain.
-func (s *SmartContract) hasAnyAdmin(ctx contractapi.TransactionContextInterface) (bool, error) {
-	iter, err := ctx.GetStub().GetStateByRange(UserKeyPrefix, UserKeyPrefix+"~")
-	if err != nil {
-		return false, err
-	}
-	defer iter.Close()
-	for iter.HasNext() {
-		kv, err := iter.Next()
-		if err != nil {
-			return false, err
-		}
-		var u User
-		if err := json.Unmarshal(kv.Value, &u); err != nil {
-			continue
-		}
-		for _, r := range u.Roles {
-			if r == RoleAdmin {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-//  User state helpers
-// ═══════════════════════════════════════════════════════════════════════
-
-func (s *SmartContract) getUser(ctx contractapi.TransactionContextInterface, userID string) (*User, error) {
-	key := UserKeyPrefix + userID
-	data, err := ctx.GetStub().GetState(key)
-	if err != nil {
-		return nil, fmt.Errorf("read user %s: %w", userID, err)
-	}
-	if data == nil {
-		return nil, fmt.Errorf("user %s not found", userID)
-	}
-	var user User
-	if err := json.Unmarshal(data, &user); err != nil {
-		return nil, fmt.Errorf("parse user %s: %w", userID, err)
-	}
-	return &user, nil
-}
-
-func (s *SmartContract) putUser(ctx contractapi.TransactionContextInterface, user *User) error {
-	data, err := json.Marshal(user)
-	if err != nil {
-		return err
-	}
-	return ctx.GetStub().PutState(UserKeyPrefix+user.ID, data)
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-//  Land state helpers
-// ═══════════════════════════════════════════════════════════════════════
-
-func (s *SmartContract) filterLand(ctx contractapi.TransactionContextInterface, fn func(*LandRecord) bool) ([]*LandRecord, error) {
-	iter, err := ctx.GetStub().GetStateByRange("", "")
-	if err != nil {
-		return nil, err
-	}
-	defer iter.Close()
-	var results []*LandRecord
-	for iter.HasNext() {
-		kv, err := iter.Next()
-		if err != nil {
-			return nil, err
-		}
-		// Skip user records (they start with "USER_")
-		// Skip sale proposals (they start with "SALE_")
-		if strings.HasPrefix(kv.Key, UserKeyPrefix) || strings.HasPrefix(kv.Key, SaleProposalPrefix) {
-			continue
-		}
-		var r LandRecord
-		if err := json.Unmarshal(kv.Value, &r); err != nil {
-			return nil, err
-		}
-		if fn(&r) {
-			results = append(results, &r)
-		}
-	}
-	return results, nil
-}
+// ══════════════════════════════════════════════════════════════════════
+//  State helpers
+// ══════════════════════════════════════════════════════════════════════
 
 func (s *SmartContract) landExists(ctx contractapi.TransactionContextInterface, id string) (bool, error) {
 	d, err := ctx.GetStub().GetState(id)
@@ -975,7 +459,7 @@ func (s *SmartContract) getLand(ctx contractapi.TransactionContextInterface, id 
 		return nil, err
 	}
 	if d == nil {
-		return nil, fmt.Errorf("plot %s not found", id)
+		return nil, fmt.Errorf("land %s not found", id)
 	}
 	var r LandRecord
 	if err := json.Unmarshal(d, &r); err != nil {
@@ -989,19 +473,191 @@ func (s *SmartContract) putLand(ctx contractapi.TransactionContextInterface, r *
 	if err != nil {
 		return err
 	}
-	return ctx.GetStub().PutState(r.PlotID, d)
+	return ctx.GetStub().PutState(r.ID, d)
 }
 
-func (s *SmartContract) stateExists(ctx contractapi.TransactionContextInterface, key string) (bool, error) {
-	d, err := ctx.GetStub().GetState(key)
-	return d != nil, err
+func (s *SmartContract) filterLand(ctx contractapi.TransactionContextInterface, fn func(*LandRecord) bool) ([]*LandRecord, error) {
+	iter, err := ctx.GetStub().GetStateByRange("", "")
+	if err != nil {
+		return nil, err
+	}
+	defer iter.Close()
+	results := []*LandRecord{}
+	for iter.HasNext() {
+		kv, err := iter.Next()
+		if err != nil {
+			return nil, err
+		}
+		if strings.HasPrefix(kv.Key, ListingKeyPrefix) || strings.HasPrefix(kv.Key, OfferKeyPrefix) || strings.HasPrefix(kv.Key, TxKeyPrefix) {
+			continue
+		}
+		var r LandRecord
+		if err := json.Unmarshal(kv.Value, &r); err != nil {
+			return nil, err
+		}
+		if fn(&r) {
+			results = append(results, &r)
+		}
+	}
+	return results, nil
 }
 
-// ── Utility ───────────────────────────────────────────────────────────
-
-func now() string {
-	return time.Now().UTC().Format(time.RFC3339)
+func (s *SmartContract) getListing(ctx contractapi.TransactionContextInterface, landID string) (*SaleListing, error) {
+	d, err := ctx.GetStub().GetState(ListingKeyPrefix + landID)
+	if err != nil {
+		return nil, err
+	}
+	if d == nil {
+		return nil, fmt.Errorf("listing for land %s not found", landID)
+	}
+	var l SaleListing
+	if err := json.Unmarshal(d, &l); err != nil {
+		return nil, err
+	}
+	return &l, nil
 }
+
+func (s *SmartContract) putListing(ctx contractapi.TransactionContextInterface, l *SaleListing) error {
+	d, _ := json.Marshal(l)
+	return ctx.GetStub().PutState(l.ID, d)
+}
+
+func (s *SmartContract) filterListings(ctx contractapi.TransactionContextInterface, fn func(*SaleListing) bool) ([]*SaleListing, error) {
+	iter, err := ctx.GetStub().GetStateByRange(ListingKeyPrefix, ListingKeyPrefix+"~")
+	if err != nil {
+		return nil, err
+	}
+	defer iter.Close()
+	results := []*SaleListing{}
+	for iter.HasNext() {
+		kv, err := iter.Next()
+		if err != nil {
+			return nil, err
+		}
+		var l SaleListing
+		if err := json.Unmarshal(kv.Value, &l); err != nil {
+			return nil, err
+		}
+		if fn(&l) {
+			results = append(results, &l)
+		}
+	}
+	return results, nil
+}
+
+func (s *SmartContract) getOfferByID(ctx contractapi.TransactionContextInterface, id string) (*BuyerOffer, error) {
+	d, err := ctx.GetStub().GetState(id)
+	if err != nil {
+		return nil, err
+	}
+	if d == nil {
+		return nil, fmt.Errorf("offer %s not found", id)
+	}
+	var o BuyerOffer
+	if err := json.Unmarshal(d, &o); err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
+func (s *SmartContract) putOffer(ctx contractapi.TransactionContextInterface, o *BuyerOffer) error {
+	d, _ := json.Marshal(o)
+	return ctx.GetStub().PutState(o.ID, d)
+}
+
+func (s *SmartContract) findOffers(ctx contractapi.TransactionContextInterface, landID, buyer string) ([]*BuyerOffer, error) {
+	prefix := OfferKeyPrefix + landID + "_"
+	iter, err := ctx.GetStub().GetStateByRange(prefix, prefix+"~")
+	if err != nil {
+		return nil, err
+	}
+	defer iter.Close()
+	results := []*BuyerOffer{}
+	for iter.HasNext() {
+		kv, err := iter.Next()
+		if err != nil {
+			return nil, err
+		}
+		var o BuyerOffer
+		if err := json.Unmarshal(kv.Value, &o); err != nil {
+			return nil, err
+		}
+		results = append(results, &o)
+	}
+	return results, nil
+}
+
+func (s *SmartContract) findAllOffersForLand(ctx contractapi.TransactionContextInterface, landID string) ([]*BuyerOffer, error) {
+	return s.findOffers(ctx, landID, "")
+}
+
+func (s *SmartContract) filterOffers(ctx contractapi.TransactionContextInterface, fn func(*BuyerOffer) bool) ([]*BuyerOffer, error) {
+	iter, err := ctx.GetStub().GetStateByRange(OfferKeyPrefix, OfferKeyPrefix+"~")
+	if err != nil {
+		return nil, err
+	}
+	defer iter.Close()
+	results := []*BuyerOffer{}
+	for iter.HasNext() {
+		kv, err := iter.Next()
+		if err != nil {
+			return nil, err
+		}
+		var o BuyerOffer
+		if err := json.Unmarshal(kv.Value, &o); err != nil {
+			return nil, err
+		}
+		if fn(&o) {
+			results = append(results, &o)
+		}
+	}
+	return results, nil
+}
+
+func (s *SmartContract) getTransaction(ctx contractapi.TransactionContextInterface, id string) (*Transaction, error) {
+	d, err := ctx.GetStub().GetState(id)
+	if err != nil {
+		return nil, err
+	}
+	if d == nil {
+		return nil, fmt.Errorf("transaction %s not found", id)
+	}
+	var tx Transaction
+	if err := json.Unmarshal(d, &tx); err != nil {
+		return nil, err
+	}
+	return &tx, nil
+}
+
+func (s *SmartContract) putTransaction(ctx contractapi.TransactionContextInterface, tx *Transaction) error {
+	d, _ := json.Marshal(tx)
+	return ctx.GetStub().PutState(tx.ID, d)
+}
+
+func (s *SmartContract) filterTransactions(ctx contractapi.TransactionContextInterface, fn func(*Transaction) bool) ([]*Transaction, error) {
+	iter, err := ctx.GetStub().GetStateByRange(TxKeyPrefix, TxKeyPrefix+"~")
+	if err != nil {
+		return nil, err
+	}
+	defer iter.Close()
+	results := []*Transaction{}
+	for iter.HasNext() {
+		kv, err := iter.Next()
+		if err != nil {
+			return nil, err
+		}
+		var tx Transaction
+		if err := json.Unmarshal(kv.Value, &tx); err != nil {
+			return nil, err
+		}
+		if fn(&tx) {
+			results = append(results, &tx)
+		}
+	}
+	return results, nil
+}
+
+func now() string { return time.Now().UTC().Format(time.RFC3339) }
 
 func main() {
 	cc, err := contractapi.NewChaincode(&SmartContract{})

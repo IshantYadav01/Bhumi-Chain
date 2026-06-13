@@ -1,15 +1,13 @@
+import "./globals.css";
+
+export const metadata = {
+  title: "Land Registry — Private Blockchain",
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body
-        style={{
-          margin: 0,
-          fontFamily: "system-ui, sans-serif",
-          background: "#0f0f0f",
-          color: "#e0e0e0",
-        }}
-      >
-        <title>Land Registry — Private Blockchain</title>
+      <body className="m-0 font-sans bg-[#0f0f0f] text-[#e0e0e0]">
         {children}
       </body>
     </html>

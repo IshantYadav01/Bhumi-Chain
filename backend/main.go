@@ -18,6 +18,18 @@ import (
 
 func main() {
 	cfg := config.Load()
+
+	// ── Initialize SQLite auth store ────────────────────────────────
+	// Ensure data directory exists
+	if err := os.MkdirAll("data", 0755); err != nil {
+		log.Fatalf("Create data dir: %v", err)
+	}
+	if err := auth.InitDB(cfg.DBPath); err != nil {
+		log.Fatalf("Init auth DB: %v", err)
+	}
+	log.Printf("Auth DB: %s", cfg.DBPath)
+
+	// ── Fabric gateway pool ─────────────────────────────────────────
 	pool := fabric.NewPool(fabric.PoolConfig{
 		PeerAddress:   cfg.GatewayPeer,
 		PeerTLSCACert: cfg.PeerTLSCACert,
@@ -28,25 +40,16 @@ func main() {
 	})
 	defer pool.Close()
 
-	// Fallback identity used when no JWT is present (for health checks, etc.).
-	defOrg, defUser := config.DefaultIdentity()
-	if defOrg == "" {
-		defOrg = "province1"
-	}
-	if defUser == "" {
-		defUser = "User1"
-	}
+	landH := handlers.NewLandHandler(pool, cfg.Org)
 
-	landH := handlers.NewLandHandler(pool, defOrg, defUser)
-
-	// ── Routes ──────────────────────────────────────────────────
+	// ── Routes ──────────────────────────────────────────────────────
 	r := gin.Default()
 
-	// CORS — allow the Next.js frontend on :3000.
+	// CORS
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Identity")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -54,22 +57,22 @@ func main() {
 		c.Next()
 	})
 
-	// Health check (no auth required).
+	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	// Login endpoint (no auth required).
+	// Auth endpoints (no JWT required)
 	r.POST("/api/login", func(c *gin.Context) {
 		var body struct {
-			Username string `json:"username"`
+			NID      string `json:"nid"`
 			Password string `json:"password"`
 		}
-		if err := c.ShouldBindJSON(&body); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "username and password required"})
+		if err := c.ShouldBindJSON(&body); err != nil || body.NID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "nid and password required"})
 			return
 		}
-		token, info, err := auth.Authenticate(body.Username, body.Password)
+		token, info, err := auth.Authenticate(body.NID, body.Password)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 			return
@@ -80,25 +83,40 @@ func main() {
 		})
 	})
 
+	r.POST("/api/signup", func(c *gin.Context) {
+		var body struct {
+			NID      string `json:"nid"`
+			Password string `json:"password"`
+			Name     string `json:"name"`
+			Role     string `json:"role"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil || body.NID == "" || body.Password == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "nid and password required"})
+			return
+		}
+		userInfo, err := auth.Signup(body.NID, body.Password, body.Name, body.Role)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{
+			"user": userInfo,
+		})
+	})
+
 	// Protected API group — requires valid JWT.
 	api := r.Group("/api")
 	api.Use(jwtMiddleware())
 	{
 		api.GET("/land", landH.QueryLand)
 		api.POST("/land", landH.PostAction)
-		api.GET("/users", landH.QueryLand)
-		api.POST("/users", landH.PostAction)
 		api.GET("/me", func(c *gin.Context) {
-			org, _ := c.Get("msp_org")
-			user, _ := c.Get("msp_user")
-			c.JSON(http.StatusOK, gin.H{
-				"org":  org,
-				"user": user,
-			})
+			nid, _ := c.Get("msp_nid")
+			c.JSON(http.StatusOK, gin.H{"nid": nid})
 		})
 	}
 
-	// ── Graceful shutdown ───────────────────────────────────────
+	// ── Graceful shutdown ───────────────────────────────────────────
 	go func() {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -108,50 +126,31 @@ func main() {
 		os.Exit(0)
 	}()
 
-	log.Printf("🚀 Fabric Gateway backend listening on %s", cfg.ListenPort)
-	log.Printf("   Peer:       %s", cfg.GatewayPeer)
-	log.Printf("   Channel:    %s", cfg.ChannelID)
-	log.Printf("   Chaincode:  %s", cfg.ChaincodeName)
+	log.Printf("🚀 Land Registry backend listening on %s", cfg.ListenPort)
+	log.Printf("   Peer:      %s", cfg.GatewayPeer)
+	log.Printf("   Channel:   %s", cfg.ChannelID)
+	log.Printf("   Chaincode: %s", cfg.ChaincodeName)
 
 	if err := r.Run(cfg.ListenPort); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 }
 
-// jwtMiddleware extracts and validates the JWT from the Authorization
-// header, then stores the MSP identity in the Gin context for handlers.
-//
-// Also supports the legacy X-Identity header for backward compatibility
-// during development (lower priority than JWT).
+// jwtMiddleware extracts and validates the JWT from the Authorization header.
 func jwtMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. Try Bearer token first.
 		authHeader := c.GetHeader("Authorization")
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-			claims, err := auth.Validate(tokenStr)
-			if err != nil {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
-				return
-			}
-			org, user := claims.Identity()
-			c.Set("msp_org", org)
-			c.Set("msp_user", user)
-			c.Next()
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			return
 		}
-
-		// 2. Fallback: X-Identity header (legacy, for seed script).
-		if xid := c.GetHeader("X-Identity"); xid != "" {
-			org, user, _ := strings.Cut(xid, "/")
-			if org != "" && user != "" {
-				c.Set("msp_org", org)
-				c.Set("msp_user", user)
-				c.Next()
-				return
-			}
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		claims, err := auth.Validate(tokenStr)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			return
 		}
-
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		c.Set("msp_nid", claims.NID)
+		c.Next()
 	}
 }

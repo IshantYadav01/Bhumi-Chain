@@ -1,8 +1,3 @@
-// auth.js — JWT token management for the frontend.
-//
-// Usage:
-//   import { getToken, setToken, clearToken, authHeaders } from "@/lib/auth.js";
-
 const TOKEN_KEY = "landreg_token";
 const USER_KEY = "landreg_user";
 
@@ -34,20 +29,6 @@ export function getUserInfo() {
   }
 }
 
-export function getRoles() {
-  const info = getUserInfo();
-  return info?.roles || [];
-}
-
-export function hasRole(role) {
-  return getRoles().includes(role);
-}
-
-export function hasAnyRole(...roles) {
-  return roles.some((r) => getRoles().includes(r));
-}
-
-// Returns headers object with Authorization if a token exists.
 export function authHeaders() {
   const token = getToken();
   if (!token) return { "Content-Type": "application/json" };
@@ -57,7 +38,6 @@ export function authHeaders() {
   };
 }
 
-// fetchWithAuth wraps fetch() and redirects to /login on 401.
 export async function fetchWithAuth(url, options = {}) {
   const res = await fetch(url, {
     ...options,
@@ -65,9 +45,7 @@ export async function fetchWithAuth(url, options = {}) {
   });
   if (res.status === 401) {
     clearToken();
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
-    }
+    if (typeof window !== "undefined") window.location.href = "/login";
     throw new Error("Session expired. Please login again.");
   }
   return res;

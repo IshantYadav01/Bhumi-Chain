@@ -2,940 +2,942 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import {
-  getToken,
-  clearToken,
-  authHeaders,
-  getUserInfo,
-  hasRole,
-  hasAnyRole,
-  getRoles,
-} from "@/lib/auth.js";
+import { getToken, clearToken, authHeaders, getUserInfo } from "@/lib/auth.js";
 
-// ── Styles ──────────────────────────────────────────────────────────
-const S = {
-  container: { maxWidth: 1200, margin: "0 auto", padding: "24px 16px" },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  title: { fontSize: 26, fontWeight: 700, color: "#7c3aed", margin: 0 },
-  subtitle: { fontSize: 13, color: "#888", marginTop: 4 },
-  status: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 13,
-    background: "#1a1a2e",
-    padding: "6px 14px",
-    borderRadius: 20,
-    border: "1px solid #333",
-  },
-  dot: (c) => ({
-    width: 8,
-    height: 8,
-    borderRadius: "50%",
-    background: c,
-    display: "inline-block",
-  }),
-  btn: {
-    padding: "8px 18px",
-    borderRadius: 8,
-    border: "none",
-    cursor: "pointer",
-    fontSize: 13,
-    fontWeight: 600,
-  },
-  btnPrimary: { background: "#7c3aed", color: "#fff" },
-  btnDanger: {
-    background: "transparent",
-    color: "#ef4444",
-    border: "1px solid #ef4444",
-  },
-  btnWarning: {
-    background: "transparent",
-    color: "#f59e0b",
-    border: "1px solid #f59e0b",
-  },
-  btnOutline: {
-    background: "transparent",
-    color: "#7c3aed",
-    border: "1px solid #7c3aed",
-  },
-  btnSmall: { padding: "4px 10px", fontSize: 12, borderRadius: 6 },
-  card: {
-    background: "#1a1a2e",
-    borderRadius: 12,
-    border: "1px solid #2a2a3e",
-    overflow: "hidden",
-    marginBottom: 20,
-  },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-  th: {
-    textAlign: "left",
-    padding: "10px 14px",
-    borderBottom: "1px solid #2a2a3e",
-    color: "#888",
-    fontWeight: 600,
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  td: { padding: "10px 14px", borderBottom: "1px solid #1f1f35" },
-  formCard: {
-    background: "#1a1a2e",
-    borderRadius: 12,
-    border: "1px solid #2a2a3e",
-    padding: 20,
-    marginBottom: 16,
-  },
-  formTitle: { fontSize: 14, fontWeight: 600, marginBottom: 12, color: "#ccc" },
-  input: {
-    background: "#0f0f1a",
-    border: "1px solid #333",
-    borderRadius: 6,
-    padding: "7px 11px",
-    color: "#e0e0e0",
-    fontSize: 13,
-    width: "100%",
-    boxSizing: "border-box",
-  },
-  select: {
-    background: "#0f0f1a",
-    border: "1px solid #333",
-    borderRadius: 6,
-    padding: "7px 11px",
-    color: "#e0e0e0",
-    fontSize: 13,
-    width: "100%",
-    boxSizing: "border-box",
-  },
-  inputGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-    gap: 8,
-    marginBottom: 10,
-  },
-  badge: (c, bg) => ({
-    display: "inline-block",
-    padding: "2px 8px",
-    borderRadius: 4,
-    fontSize: 11,
-    fontWeight: 600,
-    background: bg,
-    color: c,
-  }),
-  toast: {
-    position: "fixed",
-    bottom: 24,
-    right: 24,
-    padding: "12px 20px",
-    borderRadius: 10,
-    fontSize: 14,
-    fontWeight: 600,
-    zIndex: 999,
-  },
-  tabBar: { display: "flex", gap: 4, marginBottom: 16 },
-  tab: (active) => ({
-    padding: "6px 16px",
-    borderRadius: 8,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-    border: "none",
-    background: active ? "#7c3aed" : "transparent",
-    color: active ? "#fff" : "#888",
-    transition: "all 0.15s",
-  }),
-};
-
-function statusBadge(status) {
-  const map = {
-    active: { color: "#22c55e", bg: "#22c55e22" },
+function Badge({ status }) {
+  const m = {
+    active: "bg-green-900/20 text-green-400",
+    listed: "bg-yellow-900/20 text-yellow-400",
+    sold: "bg-purple-900/20 text-purple-300",
+    pending: "bg-blue-900/20 text-blue-400",
+    completed: "bg-green-900/20 text-green-400",
+    cancelled: "bg-red-900/20 text-red-400",
+    pending_buyer_confirm: "bg-yellow-900/20 text-yellow-400",
+    pending_admin: "bg-purple-900/20 text-purple-300",
+    rejected: "bg-red-900/20 text-red-400",
   };
-  const s = map[status] || { color: "#888", bg: "#88822" };
-  return <span style={S.badge(s.color, s.bg)}>{status}</span>;
+  return (
+    <span
+      className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${m[status] || "bg-gray-800 text-gray-400"}`}
+    >
+      {status}
+    </span>
+  );
 }
 
-// ── Main Page ───────────────────────────────────────────────────────
+function cn(name) {
+  return name || "—";
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
+const btn = "px-4 py-2 rounded-lg text-sm font-semibold border-none";
+const btnPri = "bg-[#7c3aed] text-white";
+const btnSuc = "bg-green-600 text-white";
+const btnDng = "bg-transparent text-red-400 border border-red-400";
+const btnWrn = "bg-transparent text-yellow-400 border border-yellow-400";
+const btnOut = "bg-transparent text-[#7c3aed] border border-[#7c3aed]";
+const btnSm = "px-2.5 py-1 text-xs rounded-md";
+const card =
+  "bg-[#1a1a2e] rounded-xl border border-[#2a2a3e] overflow-hidden mb-5";
+const fc = "bg-[#1a1a2e] rounded-xl border border-[#2a2a3e] p-5 mb-4";
+const inp =
+  "w-full bg-[#0f0f1a] border border-[#333] rounded-md px-3 py-1.5 text-sm text-[#e0e0e0]";
+const sel =
+  "w-full bg-[#0f0f1a] border border-[#333] rounded-md px-3 py-1.5 text-sm text-[#e0e0e0]";
+
 export default function Home() {
   const router = useRouter();
-  const [lands, setLands] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [view, setView] = useState("lands");
+  const [u, setU] = useState(null);
   const [toast, setToast] = useState(null);
-  const [selected, setSelected] = useState(null);
-  const [networkStatus, setNetworkStatus] = useState("checking");
-  const [tab, setTab] = useState("all"); // all | active
-  const [filterOwner, setFilterOwner] = useState("");
-  const [userInfo, setUserInfo] = useState(null);
-  const [sales, setSales] = useState([]);
-  const [pendingApprovals, setPendingApprovals] = useState([]);
-  const [salesLoading, setSalesLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [connected, setConnected] = useState(false);
 
-  // Redirect to login if no token.
-  useEffect(() => {
-    if (!getToken()) router.replace("/login");
-  }, [router]);
+  const [lands, setLands] = useState([]);
+  const [listings, setListings] = useState([]);
+  const [offers, setOffers] = useState([]);
+  const [txs, setTxs] = useState([]);
+  const [pendingTxs, setPendingTxs] = useState([]);
+  const [offersForLand, setOffersForLand] = useState([]);
+  const [sel, setSel] = useState(null);
 
-  useEffect(() => {
-    const info = getUserInfo();
-    if (info) setUserInfo(info);
-  }, []);
-
-  const handleLogout = () => {
-    clearToken();
-    router.replace("/login");
-  };
-
-  const [form, setForm] = useState({
-    action: "register",
+  // Form
+  const [f, setF] = useState({
     plotId: "",
-    surveyNumber: "",
     owner: "",
     location: "",
     area: "",
-    landType: "residential",
-    buyer: "",
+    landId: "",
     price: "",
+    offeredPrice: "",
+    offerId: "",
+    txId: "",
   });
 
-  const clearForm = () =>
-    setForm({
-      action: "register",
-      plotId: "",
-      surveyNumber: "",
-      owner: "",
-      location: "",
-      area: "",
-      landType: "residential",
-      buyer: "",
-      price: "",
-    });
+  const admin = u?.role === "admin";
 
-  const showToast = (msg, ok = true) => {
+  const t = (msg, ok = true) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchLands = useCallback(async () => {
-    try {
-      setLoading(true);
-      let url = "/api/land";
-      if (tab !== "all") url += `?status=${tab}`;
-      else if (filterOwner) url += `?owner=${encodeURIComponent(filterOwner)}`;
-      const res = await fetch(url, { headers: authHeaders() });
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
-        return;
+  useEffect(() => {
+    if (!getToken()) router.replace("/login");
+    const info = getUserInfo();
+    if (info) setU(info);
+  }, [router]);
+
+  const apiGet = useCallback(
+    async (url) => {
+      try {
+        const res = await fetch(url, { headers: authHeaders() });
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return null;
+        }
+        if (!res.ok) {
+          const d = await res.json();
+          throw new Error(d.error || "API error");
+        }
+        const data = await res.json();
+        setConnected(true);
+        return Array.isArray(data) ? data : [];
+      } catch (e) {
+        setConnected(false);
+        t(e.message, false);
+        return null;
       }
-      if (!res.ok) throw new Error("API error");
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setLands(Array.isArray(data) ? data : []);
-      setError(null);
-      setNetworkStatus("connected");
-    } catch (err) {
-      setError(err.message);
-      setNetworkStatus("disconnected");
-    } finally {
-      setLoading(false);
-    }
-  }, [tab, filterOwner, router]);
+    },
+    [router],
+  );
+
+  const apiPost = useCallback(
+    async (action, body = {}) => {
+      try {
+        const res = await fetch("/api/land", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ action, ...body }),
+        });
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return null;
+        }
+        const data = await res.json();
+        if (data.error) {
+          t(data.error, false);
+          return null;
+        }
+        t(`${action} successful!`);
+        return data;
+      } catch (e) {
+        t(e.message, false);
+        return null;
+      }
+    },
+    [router],
+  );
+
+  const fl = useCallback(async () => {
+    const d = await apiGet("/api/land");
+    if (d !== null) setLands(d);
+  }, [apiGet]);
+  const fls = useCallback(async () => {
+    const d = await apiGet("/api/land?action=listings");
+    if (d !== null) setListings(d);
+  }, [apiGet]);
+  const fo = useCallback(async () => {
+    const d = await apiGet("/api/land?action=my-offers");
+    if (d !== null) setOffers(d);
+  }, [apiGet]);
+  const ft = useCallback(async () => {
+    const d = await apiGet("/api/land?action=my-transactions");
+    if (d !== null) setTxs(d);
+  }, [apiGet]);
+  const fpt = useCallback(async () => {
+    const d = await apiGet("/api/land?action=pending-transactions");
+    if (d !== null) setPendingTxs(d);
+  }, [apiGet]);
 
   useEffect(() => {
-    fetchLands();
-    const i = setInterval(fetchLands, 8000);
-    return () => clearInterval(i);
-  }, [fetchLands]);
+    setLoading(true);
+    const calls = [fl(), fls(), fo(), ft()];
+    if (admin) calls.push(fpt());
+    Promise.all(calls).finally(() => setLoading(false));
+  }, [fl, fls, fo, ft, fpt, admin]);
 
   useEffect(() => {
-    if (tab === "sales") fetchSales();
-  }, [tab]);
-
-  const doAction = async (action, body = {}) => {
-    try {
-      const res = await fetch("/api/land", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ action, ...body }),
-      });
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
-        return false;
-      }
-      const data = await res.json();
-      if (data.error) {
-        showToast(data.error, false);
-        return false;
-      }
-      showToast(`${action} successful!`);
-      setTimeout(fetchLands, 1500);
-      return true;
-    } catch (err) {
-      showToast(err.message, false);
-      return false;
+    if (view === "lands") fl();
+    if (view === "listings") fls();
+    if (view === "offers") fo();
+    if (view === "transactions") {
+      ft();
+      if (admin) fpt();
     }
-  };
+  }, [view, fl, fls, fo, ft, fpt, admin]);
 
-  const fetchSales = async () => {
-    try {
-      setSalesLoading(true);
-      const [myRes, pendingRes] = await Promise.all([
-        fetch("/api/land?mySales=1", { headers: authHeaders() }),
-        fetch("/api/land?pendingApprovals=1", { headers: authHeaders() }),
-      ]);
-      if (myRes.ok) {
-        const d = await myRes.json();
-        setSales(Array.isArray(d) ? d : []);
+  // Poll for data every 8 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fl();
+      fls();
+      fo();
+      ft();
+      if (admin) fpt();
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [fl, fls, fo, ft, fpt, admin]);
+
+  const act = async (action, body, ...refresh) => {
+    const r = await apiPost(action, body);
+    if (r !== null) {
+      if (refresh.includes("l")) fl();
+      if (refresh.includes("ls")) fls();
+      if (refresh.includes("o")) fo();
+      if (refresh.includes("t")) {
+        ft();
+        fpt();
       }
-      if (pendingRes.ok) {
-        const d = await pendingRes.json();
-        setPendingApprovals(Array.isArray(d) ? d : []);
-      }
-    } catch {
-    } finally {
-      setSalesLoading(false);
     }
+    return r;
   };
-
-  const handleSaleAction = async (action, proposalId, extra = {}) => {
-    const ok = await doAction(action, { plotId: proposalId, ...extra });
-    if (ok) fetchSales();
-  };
-
-  const selectLand = (land) => {
-    setSelected(land);
-    setForm({
-      ...form,
-      plotId: land.plotId,
-      surveyNumber: land.surveyNumber,
-      owner: land.owner,
-      location: land.location,
-      area: String(land.area),
-      landType: land.landType,
-    });
-  };
-
-  const filtered = lands;
 
   return (
-    <div style={S.container}>
+    <div className="max-w-[1200px] mx-auto p-6">
       {/* Header */}
-      <div style={S.header}>
+      <div className="flex justify-between items-center mb-5 flex-wrap gap-3">
         <div>
-          <h1 style={S.title}>Land Registry Explorer</h1>
-          <p style={S.subtitle}>
-            Private Blockchain — 5 Department Full Nodes | Buyers, Sellers,
-            Officials as Lite Nodes
+          <h1 className="text-2xl font-bold text-[#7c3aed] m-0">
+            Land Registry
+          </h1>
+          <p className="text-xs text-[#888] mt-1">
+            {admin ? "Admin" : "Customer"} Dashboard
           </p>
         </div>
-        <div style={S.status}>
-          <span
-            style={S.dot(networkStatus === "connected" ? "#22c55e" : "#ef4444")}
-          />
-          {networkStatus === "connected" ? "Connected" : "Disconnected"}
-          <span style={{ color: "#555", marginLeft: 8 }}>
-            {lands.length} plots
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs bg-[#1a1a2e] px-3.5 py-1.5 rounded-full border border-[#333]">
+            <span
+              className={`w-2 h-2 rounded-full inline-block ${connected ? "bg-green-500" : "bg-red-500"}`}
+            />
+            {connected ? "Connected" : "Disconnected"}
+            <span className="text-[#555] ml-2">{lands.length} plots</span>
+          </div>
+          {u && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#aaa]">{u.name}</span>
+              <span
+                className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${admin ? "bg-[#7c3aed33] text-[#7c3aed]" : "bg-green-900/20 text-green-400"}`}
+              >
+                {u.role}
+              </span>
+            </div>
+          )}
           <button
-            onClick={handleLogout}
-            style={{
-              marginLeft: 16,
-              padding: "6px 14px",
-              borderRadius: 6,
-              border: "1px solid #555",
-              background: "transparent",
-              color: "#aaa",
-              cursor: "pointer",
-              fontSize: 12,
+            onClick={() => {
+              clearToken();
+              router.replace("/login");
             }}
+            className="text-xs bg-transparent border border-[#555] text-[#aaa] px-3.5 py-1.5 rounded-md cursor-pointer"
           >
             Logout
           </button>
         </div>
-        {userInfo && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              marginLeft: 16,
-            }}
-          >
-            <span style={{ color: "#aaa", fontSize: 12 }}>
-              {userInfo.name || userInfo.username}
-            </span>
-            {userInfo.roles?.map((r) => (
-              <span
-                key={r}
-                style={{
-                  padding: "2px 8px",
-                  borderRadius: 4,
-                  fontSize: 10,
-                  background:
-                    r === "admin"
-                      ? "#7c3aed"
-                      : r === "malpot"
-                        ? "#0891b2"
-                        : r === "official"
-                          ? "#2563eb"
-                          : r === "seller"
-                            ? "#ea580c"
-                            : r === "buyer"
-                              ? "#16a34a"
-                              : r === "bank"
-                                ? "#dc2626"
-                                : r === "court"
-                                  ? "#9333ea"
-                                  : "#6b7280",
-                  color: "#fff",
-                  fontWeight: 600,
-                }}
-              >
-                {r}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
-      {error && (
-        <div
-          style={{
-            background: "#3b1111",
-            border: "1px solid #ef4444",
-            borderRadius: 8,
-            padding: "10px 16px",
-            marginBottom: 16,
-            fontSize: 13,
-            color: "#fca5a5",
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {/* Filter Bar */}
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          marginBottom: 16,
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
-        <div style={S.tabBar}>
-          {["all", "active"].map((t) => (
-            <button
-              key={t}
-              style={S.tab(tab === t)}
-              onClick={() => {
-                setTab(t);
-                setFilterOwner("");
-              }}
-            >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 flex-wrap">
+        {[
+          ["lands", "All Lands"],
+          ["listings", "For Sale"],
+          ["offers", "My Offers"],
+          ["transactions", "Transactions"],
+          ...(admin ? [["admin", "Admin Panel"]] : []),
+        ].map(([k, label]) => (
           <button
-            style={
-              tab === "sales"
-                ? { ...S.tab(true), background: "#4caf50", color: "#fff" }
-                : S.tab(false)
-            }
-            onClick={() => setTab("sales")}
-          >
-            Sales
-          </button>
-        </div>
-        <input
-          style={{ ...S.input, width: 200 }}
-          placeholder="Filter by owner..."
-          value={filterOwner}
-          onChange={(e) => {
-            setFilterOwner(e.target.value);
-            setTab("all");
-          }}
-        />
-      </div>
-
-      {/* Land Table */}
-      <div style={S.card}>
-        <table style={S.table}>
-          <thead>
-            <tr>
-              <th style={S.th}>Plot ID</th>
-              <th style={S.th}>Survey #</th>
-              <th style={S.th}>Owner</th>
-              <th style={S.th}>Location</th>
-              <th style={S.th}>Area (m²)</th>
-              <th style={S.th}>Type</th>
-              <th style={S.th}>Status</th>
-              <th style={S.th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && filtered.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={8}
-                  style={{ textAlign: "center", padding: 40, color: "#666" }}
-                >
-                  Loading...
-                </td>
-              </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={8}
-                  style={{ textAlign: "center", padding: 40, color: "#666" }}
-                >
-                  No land records. Register one below.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((l) => (
-                <tr
-                  key={l.plotId}
-                  style={{
-                    cursor: "pointer",
-                    background:
-                      selected?.plotId === l.plotId ? "#252540" : "transparent",
-                  }}
-                  onClick={() => selectLand(l)}
-                >
-                  <td style={S.td}>
-                    <code style={{ color: "#a78bfa" }}>{l.plotId}</code>
-                  </td>
-                  <td style={S.td}>{l.surveyNumber}</td>
-                  <td style={S.td}>{l.owner}</td>
-                  <td style={S.td}>{l.location}</td>
-                  <td style={S.td}>{l.area}</td>
-                  <td style={S.td}>{l.landType}</td>
-                  <td style={S.td}>{statusBadge(l.status)}</td>
-                  <td style={S.td}></td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Action Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        {/* Register Land */}
-        {hasAnyRole("admin", "malpot", "official") && (
-          <div style={S.formCard}>
-            <div style={S.formTitle}>Register New Land</div>
-            <div style={S.inputGrid}>
-              <input
-                style={S.input}
-                placeholder="Plot ID *"
-                value={form.plotId}
-                onChange={(e) => setForm({ ...form, plotId: e.target.value })}
-              />
-              <input
-                style={S.input}
-                placeholder="Survey Number"
-                value={form.surveyNumber}
-                onChange={(e) =>
-                  setForm({ ...form, surveyNumber: e.target.value })
-                }
-              />
-              <input
-                style={S.input}
-                placeholder="Owner *"
-                value={form.owner}
-                onChange={(e) => setForm({ ...form, owner: e.target.value })}
-              />
-              <input
-                style={S.input}
-                placeholder="Location"
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
-              />
-              <input
-                style={S.input}
-                placeholder="Area (m²)"
-                type="number"
-                value={form.area}
-                onChange={(e) => setForm({ ...form, area: e.target.value })}
-              />
-              <select
-                style={S.select}
-                value={form.landType}
-                onChange={(e) => setForm({ ...form, landType: e.target.value })}
-              >
-                <option value="residential">Residential</option>
-                <option value="commercial">Commercial</option>
-                <option value="agricultural">Agricultural</option>
-                <option value="industrial">Industrial</option>
-              </select>
-            </div>
-            <button
-              style={{ ...S.btn, ...S.btnPrimary }}
-              disabled={!form.plotId || !form.owner}
-              onClick={() =>
-                doAction("register", {
-                  plotId: form.plotId,
-                  surveyNumber: form.surveyNumber,
-                  owner: form.owner,
-                  location: form.location,
-                  area: parseFloat(form.area) || 0,
-                  landType: form.landType,
-                }).then((ok) => ok && clearForm())
-              }
-            >
-              Register Land
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Selected Land Detail */}
-      {selected && (
-        <div style={{ ...S.formCard, marginTop: 16 }}>
-          <div style={S.formTitle}>
-            Details: {selected.plotId} {statusBadge(selected.status)}
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 8,
-              fontSize: 13,
+            key={k}
+            onClick={() => {
+              setView(k);
+              setSel(null);
             }}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer transition-all ${view === k ? "bg-[#7c3aed] text-white" : "bg-transparent text-[#888]"}`}
           >
-            <div>
-              <span style={{ color: "#888" }}>Survey #:</span>{" "}
-              {selected.surveyNumber}
-            </div>
-            <div>
-              <span style={{ color: "#888" }}>Owner:</span> {selected.owner}
-            </div>
-            <div>
-              <span style={{ color: "#888" }}>Previous:</span>{" "}
-              {selected.previousOwner || "—"}
-            </div>
-            <div>
-              <span style={{ color: "#888" }}>Location:</span>{" "}
-              {selected.location}
-            </div>
-            <div>
-              <span style={{ color: "#888" }}>Area:</span> {selected.area} m²
-            </div>
-            <div>
-              <span style={{ color: "#888" }}>Type:</span> {selected.landType}
-            </div>
-            <div>
-              <span style={{ color: "#888" }}>Transfers:</span>{" "}
-              {selected.transferCount}
-            </div>
-            <div>
-              <span style={{ color: "#888" }}>Registered:</span>{" "}
-              {selected.registeredDate?.slice(0, 10)}
-            </div>
-            {selected.lastTransfer && (
-              <div>
-                <span style={{ color: "#888" }}>Last Sale:</span>{" "}
-                {selected.lastTransfer.from} → {selected.lastTransfer.to} (Rs.
-                {selected.lastTransfer.price})
-              </div>
-            )}
-          </div>
-        </div>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {loading && (
+        <div className="text-center py-10 text-[#666]">Loading...</div>
       )}
 
-      {/* Sales Tab */}
-      {tab === "sales" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Initiate Sale */}
-          {
-            <div style={S.formCard}>
-              <div style={S.formTitle}>Initiate Sale Proposal</div>
-              <div style={S.inputGrid}>
-                <select
-                  style={S.select}
-                  value={form.plotId}
-                  onChange={(e) => setForm({ ...form, plotId: e.target.value })}
-                >
-                  <option value="">-- Select your plot --</option>
-                  {lands
-                    .filter((l) => l.status === "active")
-                    .map((l) => (
-                      <option key={l.plotId} value={l.plotId}>
-                        {l.plotId} — {l.location}
-                      </option>
-                    ))}
-                </select>
-                <input
-                  style={S.input}
-                  placeholder="Buyer CN *"
-                  value={form.buyer}
-                  onChange={(e) => setForm({ ...form, buyer: e.target.value })}
-                />
-                <input
-                  style={S.input}
-                  placeholder="Price (Rs.)"
-                  type="number"
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
-                />
-              </div>
-              <button
-                style={{ ...S.btn, ...S.btnPrimary }}
-                disabled={!form.plotId || !form.buyer}
-                onClick={() =>
-                  handleSaleAction("initiate-sale", form.plotId, {
-                    buyer: form.buyer,
-                    price: parseFloat(form.price) || 0,
-                  }).then((ok) => ok && clearForm())
-                }
-              >
-                Initiate Sale
-              </button>
-            </div>
-          }
-
-          {/* Pending Approvals */}
-          {salesLoading ? (
-            <div
-              style={{
-                color: "#666",
-                fontSize: 13,
-                textAlign: "center",
-                padding: 20,
-              }}
-            >
-              Loading sales...
-            </div>
-          ) : (
-            <>
-              {pendingApprovals.length > 0 && (
-                <div style={S.formCard}>
-                  <div style={S.formTitle}>Pending Approvals</div>
-                  {pendingApprovals.map((p) => (
-                    <div
-                      key={p.proposalId || p.plotId}
-                      style={{
-                        background: "#1a1a1a",
-                        border: "1px solid #333",
-                        borderRadius: 8,
-                        padding: 12,
-                        marginBottom: 8,
-                        fontSize: 13,
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
+      {!loading && (
+        <>
+          {/* ── LANDS ── */}
+          {view === "lands" && (
+            <div className={card}>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-[#888] font-semibold text-[11px] uppercase tracking-wider">
+                    <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                      ID
+                    </th>
+                    <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                      Owner
+                    </th>
+                    <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                      Location
+                    </th>
+                    <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                      Area
+                    </th>
+                    <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                      Status
+                    </th>
+                    <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                      Price
+                    </th>
+                    <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                      Transfers
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lands.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-10 text-[#666]">
+                        No land records.
+                      </td>
+                    </tr>
+                  ) : (
+                    lands.map((l) => (
+                      <tr
+                        key={l.id}
+                        onClick={() => setSel(l)}
+                        className={`cursor-pointer ${sel?.id === l.id ? "bg-[#252540]" : ""}`}
                       >
-                        <div>
-                          <code style={{ color: "#a78bfa" }}>
-                            {p.proposalId || p.plotId}
-                          </code>{" "}
-                          <span style={{ color: "#888" }}>
-                            {p.plotId} — Seller: {p.seller} → Buyer: {p.buyer} —
-                            Rs.{p.price}
-                          </span>
-                        </div>
-                      </div>
-                      <div
-                        style={{ marginTop: 8, color: "#777", fontSize: 11 }}
-                      >
-                        Approvals:{" "}
-                        {p.approvals
-                          ? Object.entries(p.approvals)
-                              .map(([k, v]) => `${k}: ${v ? "✅" : "⏳"}`)
-                              .join("  ")
-                          : "None yet"}
-                      </div>
-                      {hasRole("official") && (
-                        <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-                          <button
-                            style={{ ...S.btn, ...S.btnPrimary, ...S.btnSmall }}
-                            onClick={() =>
-                              handleSaleAction(
-                                "approve-sale",
-                                p.proposalId || p.plotId,
-                              )
-                            }
-                          >
-                            Approve
-                          </button>
-                          <button
-                            style={{ ...S.btn, ...S.btnDanger, ...S.btnSmall }}
-                            onClick={() =>
-                              handleSaleAction(
-                                "reject-sale",
-                                p.proposalId || p.plotId,
-                              )
-                            }
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      )}
+                        <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                          <code className="text-[#a78bfa]">{l.id}</code>
+                        </td>
+                        <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                          {cn(l.owner)}
+                        </td>
+                        <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                          {l.location}
+                        </td>
+                        <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                          {l.area} m²
+                        </td>
+                        <td className="px-3.5 py-2.5 border-b border-[#1f1f35]}">
+                          <Badge status={l.status} />
+                        </td>
+                        <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                          {l.price ? `Rs.${l.price}` : "—"}
+                        </td>
+                        <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                          {l.transferCount || 0}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+              {sel && (
+                <div className="p-4 border-t border-[#2a2a3e] text-xs animate-slide-up">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <span className="text-[#888]">ID:</span> {sel.id}
                     </div>
-                  ))}
+                    <div>
+                      <span className="text-[#888]">Owner:</span> {sel.owner}
+                    </div>
+                    <div>
+                      <span className="text-[#888]">Previous:</span>{" "}
+                      {sel.previousOwner || "—"}
+                    </div>
+                    <div>
+                      <span className="text-[#888]">Location:</span>{" "}
+                      {sel.location}
+                    </div>
+                    <div>
+                      <span className="text-[#888]">Area:</span> {sel.area} m²
+                    </div>
+                    <div>
+                      <span className="text-[#888]">Status:</span>{" "}
+                      <Badge status={sel.status} />
+                    </div>
+                    <div>
+                      <span className="text-[#888]">Price:</span>{" "}
+                      {sel.price ? `Rs.${sel.price}` : "—"}
+                    </div>
+                    <div>
+                      <span className="text-[#888]">Transfers:</span>{" "}
+                      {sel.transferCount || 0}
+                    </div>
+                    <div>
+                      <span className="text-[#888]">Registered:</span>{" "}
+                      {sel.registeredAt?.slice(0, 10)}
+                    </div>
+                    {sel.lastTransfer && (
+                      <div className="col-span-3">
+                        <span className="text-[#888]">Last Sale:</span>{" "}
+                        {cn(sel.lastTransfer.from)} → {cn(sel.lastTransfer.to)}{" "}
+                        (Rs.{sel.lastTransfer.price})
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
+            </div>
+          )}
 
-              {/* My Sale Proposals */}
-              {sales.length > 0 && (
-                <div style={S.formCard}>
-                  <div style={S.formTitle}>My Sale Proposals</div>
-                  {sales.map((p) => (
-                    <div
-                      key={p.proposalId || p.plotId}
-                      style={{
-                        background: "#1a1a1a",
-                        border: "1px solid #333",
-                        borderRadius: 8,
-                        padding: 12,
-                        marginBottom: 8,
-                        fontSize: 13,
+          {/* ── LISTINGS ── */}
+          {view === "listings" && (
+            <>
+              {/* List for sale form */}
+              <div className={fc}>
+                <div className="text-sm font-semibold text-[#ccc] mb-3">
+                  List Your Land for Sale
+                </div>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 mb-2.5">
+                  <select
+                    className={sel}
+                    value={f.landId}
+                    onChange={(e) => setF({ ...f, landId: e.target.value })}
+                  >
+                    <option value="">-- Select your land --</option>
+                    {lands
+                      .filter(
+                        (l) => l.owner === u?.nid && l.status === "active",
+                      )
+                      .map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.id} — {l.location}
+                        </option>
+                      ))}
+                  </select>
+                  <input
+                    className={inp}
+                    placeholder="Price (Rs.)"
+                    type="number"
+                    value={f.price}
+                    onChange={(e) => setF({ ...f, price: e.target.value })}
+                  />
+                </div>
+                <button
+                  className={`${btn} ${btnPri}`}
+                  disabled={!f.landId || !f.price}
+                  onClick={() =>
+                    act(
+                      "list-for-sale",
+                      { landId: f.landId, price: parseFloat(f.price) },
+                      "l",
+                      "ls",
+                    ).then(() => setF({ ...f, landId: "", price: "" }))
+                  }
+                >
+                  List for Sale
+                </button>
+              </div>
+
+              {/* Active listings */}
+              <div className={card}>
+                <div className="px-4 py-3 border-b border-[#2a2a3e] text-sm font-semibold text-[#ccc]">
+                  Active Listings
+                </div>
+                {listings.length === 0 ? (
+                  <div className="text-center py-10 text-[#666] text-xs">
+                    No active listings.
+                  </div>
+                ) : (
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="text-[#888] font-semibold text-[11px] uppercase tracking-wider">
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Land
+                        </th>
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Seller
+                        </th>
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Price
+                        </th>
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Status
+                        </th>
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {listings.map((l) => {
+                        const isOwner = l.seller === u?.nid;
+                        return (
+                          <tr key={l.id}>
+                            <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                              <code className="text-[#a78bfa]">{l.landId}</code>
+                            </td>
+                            <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                              {cn(l.seller)}
+                            </td>
+                            <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                              Rs.{l.price}
+                            </td>
+                            <td className="px-3.5 py-2.5 border-b border-[#1f1f35]}">
+                              <Badge status={l.status} />
+                            </td>
+                            <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                              {!isOwner && l.status === "active" && (
+                                <button
+                                  className={`${btn} ${btnSuc} ${btnSm}`}
+                                  onClick={() => {
+                                    setF({ ...f, landId: l.landId });
+                                    act(
+                                      "make-offer",
+                                      {
+                                        landId: l.landId,
+                                        offeredPrice:
+                                          parseFloat(f.offeredPrice) || l.price,
+                                      },
+                                      "o",
+                                    );
+                                  }}
+                                >
+                                  Make Offer
+                                </button>
+                              )}
+                              {!isOwner && (
+                                <input
+                                  className={`${inp} inline-block w-24 ml-2`}
+                                  placeholder="Price"
+                                  type="number"
+                                  value={f.offeredPrice}
+                                  onChange={(e) =>
+                                    setF({ ...f, offeredPrice: e.target.value })
+                                  }
+                                />
+                              )}
+                              {isOwner && l.status === "active" && (
+                                <button
+                                  className={`${btn} ${btnDng} ${btnSm}`}
+                                  onClick={() =>
+                                    act(
+                                      "cancel-listing",
+                                      { landId: l.landId },
+                                      "l",
+                                      "ls",
+                                    )
+                                  }
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── OFFERS ── */}
+          {view === "offers" && (
+            <>
+              {/* Incoming offers — need a landId input */}
+              <div className={fc}>
+                <div className="text-sm font-semibold text-[#ccc] mb-3">
+                  View Offers for Your Land
+                </div>
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label className="text-[11px] text-[#888] block mb-1">
+                      Land ID
+                    </label>
+                    <select
+                      className={sel}
+                      value={f.landViewId}
+                      onChange={(e) => {
+                        setF({ ...f, landViewId: e.target.value });
+                        apiGet(`/api/land?landId=${e.target.value}`).then(
+                          (d) => {
+                            if (d !== null) setOffersForLand(d);
+                          },
+                        );
                       }}
                     >
+                      <option value="">-- Select --</option>
+                      {lands
+                        .filter(
+                          (l) =>
+                            l.owner === u?.nid &&
+                            (l.status === "listed" || l.status === "active"),
+                        )
+                        .map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.id}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+
+                {offersForLand.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {offersForLand.map((o) => (
                       <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
+                        key={o.id}
+                        className="bg-[#1a1a1a] border border-[#333] rounded-lg p-3 text-xs"
                       >
-                        <div>
-                          <code style={{ color: "#a78bfa" }}>
-                            {p.proposalId || p.plotId}
-                          </code>{" "}
-                          <span style={{ color: "#888" }}>
-                            {p.plotId} — {p.seller} → {p.buyer} — Rs.{p.price}
-                          </span>
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="text-[#888]">Buyer:</span>{" "}
+                            {cn(o.buyer)} &nbsp;
+                            <span className="text-[#888]">Offer:</span> Rs.
+                            {o.offeredPrice} &nbsp;
+                            <Badge status={o.status} />
+                          </div>
+                          {o.status === "pending" && (
+                            <button
+                              className={`${btn} ${btnPri} ${btnSm}`}
+                              onClick={() =>
+                                act(
+                                  "accept-offer",
+                                  { offerId: o.id },
+                                  "l",
+                                  "ls",
+                                  "o",
+                                  "t",
+                                )
+                              }
+                            >
+                              Accept
+                            </button>
+                          )}
                         </div>
-                        <span
-                          style={{
-                            padding: "2px 8px",
-                            borderRadius: 4,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            background:
-                              p.status === "approved"
-                                ? "#16a34a33"
-                                : p.status === "rejected"
-                                  ? "#dc262633"
-                                  : "#f59e0b33",
-                            color:
-                              p.status === "approved"
-                                ? "#86efac"
-                                : p.status === "rejected"
-                                  ? "#fca5a5"
-                                  : "#fde68a",
-                          }}
-                        >
-                          {p.status || "pending"}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {offersForLand.length === 0 && (
+                  <div className="text-xs text-[#666] mt-2">
+                    No offers for this land.
+                  </div>
+                )}
+              </div>
+
+              {/* My outgoing offers */}
+              <div className={card}>
+                <div className="px-4 py-3 border-b border-[#2a2a3e] text-sm font-semibold text-[#ccc]">
+                  My Offers
+                </div>
+                {offers.length === 0 ? (
+                  <div className="text-center py-10 text-[#666] text-xs">
+                    No offers made yet.
+                  </div>
+                ) : (
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="text-[#888] font-semibold text-[11px] uppercase tracking-wider">
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Land
+                        </th>
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Offered
+                        </th>
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {offers.map((o) => (
+                        <tr key={o.id}>
+                          <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                            <code className="text-[#a78bfa]">{o.landId}</code>
+                          </td>
+                          <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                            Rs.{o.offeredPrice}
+                          </td>
+                          <td className="px-3.5 py-2.5 border-b border-[#1f1f35]}">
+                            <Badge status={o.status} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── TRANSACTIONS ── */}
+          {view === "transactions" && (
+            <>
+              {/* Pending admin (admin only) */}
+              {admin && pendingTxs.length > 0 && (
+                <div className={fc}>
+                  <div className="text-sm font-semibold text-[#ccc] mb-3">
+                    Pending Admin Approval
+                  </div>
+                  {pendingTxs.map((tx) => (
+                    <div
+                      key={tx.id}
+                      className="bg-[#1a1a1a] border border-[#333] rounded-lg p-3 text-xs mb-2 flex justify-between items-center"
+                    >
+                      <div>
+                        <code className="text-[#a78bfa]">{tx.landId}</code>
+                        <span className="text-[#888] ml-2">
+                          {cn(tx.seller)} → {cn(tx.buyer)} — Rs.{tx.price}
                         </span>
                       </div>
-                      <div
-                        style={{ marginTop: 8, color: "#777", fontSize: 11 }}
-                      >
-                        Approvals:{" "}
-                        {p.approvals
-                          ? Object.entries(p.approvals)
-                              .map(([k, v]) => `${k}: ${v ? "✅" : "⏳"}`)
-                              .join("  ")
-                          : "None yet"}
-                      </div>
-                      {p.status === "approved" && (
+                      <div className="flex gap-2">
+                        <Badge status={tx.status} />
                         <button
-                          style={{
-                            ...S.btn,
-                            ...S.btnPrimary,
-                            ...S.btnSmall,
-                            marginTop: 8,
-                          }}
+                          className={`${btn} ${btnSuc} ${btnSm}`}
                           onClick={() =>
-                            handleSaleAction(
-                              "execute-sale",
-                              p.proposalId || p.plotId,
+                            act(
+                              "admin-approve",
+                              { txId: tx.id },
+                              "l",
+                              "ls",
+                              "t",
                             )
                           }
                         >
-                          Execute Sale
+                          Approve
                         </button>
-                      )}
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {pendingApprovals.length === 0 && sales.length === 0 && (
-                <div
-                  style={{
-                    color: "#666",
-                    fontSize: 13,
-                    textAlign: "center",
-                    padding: 20,
-                  }}
-                >
-                  No sale proposals yet.
+              {/* My transactions */}
+              <div className={card}>
+                <div className="px-4 py-3 border-b border-[#2a2a3e] text-sm font-semibold text-[#ccc]">
+                  My Transactions
                 </div>
-              )}
+                {txs.length === 0 ? (
+                  <div className="text-center py-10 text-[#666] text-xs">
+                    No transactions.
+                  </div>
+                ) : (
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="text-[#888] font-semibold text-[11px] uppercase tracking-wider">
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Land
+                        </th>
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Seller
+                        </th>
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Buyer
+                        </th>
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Price
+                        </th>
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]">
+                          Status
+                        </th>
+                        <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e]"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {txs.map((tx) => {
+                        const call = u?.nid;
+                        const amBuyer = tx.buyer === call;
+                        const amSeller = tx.seller === call;
+                        return (
+                          <tr key={tx.id}>
+                            <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                              <code className="text-[#a78bfa]">
+                                {tx.landId}
+                              </code>
+                            </td>
+                            <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                              {cn(tx.seller)}
+                            </td>
+                            <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                              {cn(tx.buyer)}
+                            </td>
+                            <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                              Rs.{tx.price}
+                            </td>
+                            <td className="px-3.5 py-2.5 border-b border-[#1f1f35]}">
+                              <Badge status={tx.status} />
+                            </td>
+                            <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
+                              {amBuyer &&
+                                tx.status === "pending_buyer_confirm" && (
+                                  <button
+                                    className={`${btn} ${btnSuc} ${btnSm}`}
+                                    onClick={() =>
+                                      act(
+                                        "confirm-transaction",
+                                        { txId: tx.id },
+                                        "l",
+                                        "ls",
+                                        "t",
+                                      )
+                                    }
+                                  >
+                                    Confirm
+                                  </button>
+                                )}
+                              {(amBuyer || amSeller) &&
+                                tx.status !== "completed" &&
+                                tx.status !== "rejected" && (
+                                  <button
+                                    className={`${btn} ${btnDng} ${btnSm} ml-1`}
+                                    onClick={() =>
+                                      act(
+                                        "reject-transaction",
+                                        { txId: tx.id },
+                                        "l",
+                                        "ls",
+                                        "t",
+                                      )
+                                    }
+                                  >
+                                    Reject
+                                  </button>
+                                )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </>
           )}
-        </div>
+
+          {/* ── ADMIN PANEL ── */}
+          {view === "admin" && admin && (
+            <>
+              {/* Register Land */}
+              <div className={fc}>
+                <div className="text-sm font-semibold text-[#ccc] mb-3">
+                  Register New Land
+                </div>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 mb-2.5">
+                  <input
+                    className={inp}
+                    placeholder="Plot ID *"
+                    value={f.plotId}
+                    onChange={(e) => setF({ ...f, plotId: e.target.value })}
+                  />
+                  <input
+                    className={inp}
+                    placeholder="Owner * (e.g. User1@org1.example.com)"
+                    value={f.owner}
+                    onChange={(e) => setF({ ...f, owner: e.target.value })}
+                  />
+                  <input
+                    className={inp}
+                    placeholder="Location"
+                    value={f.location}
+                    onChange={(e) => setF({ ...f, location: e.target.value })}
+                  />
+                  <input
+                    className={inp}
+                    placeholder="Area (m²)"
+                    type="number"
+                    value={f.area}
+                    onChange={(e) => setF({ ...f, area: e.target.value })}
+                  />
+                </div>
+                <button
+                  className={`${btn} ${btnPri}`}
+                  disabled={!f.plotId || !f.owner}
+                  onClick={() =>
+                    act(
+                      "register",
+                      {
+                        plotId: f.plotId,
+                        owner: f.owner,
+                        location: f.location,
+                        area: parseFloat(f.area) || 0,
+                      },
+                      "l",
+                    ).then(() =>
+                      setF({
+                        ...f,
+                        plotId: "",
+                        owner: "",
+                        location: "",
+                        area: "",
+                      }),
+                    )
+                  }
+                >
+                  Register Land
+                </button>
+              </div>
+
+              {/* Pending admin transactions */}
+              <div className={card}>
+                <div className="px-4 py-3 border-b border-[#2a2a3e] text-sm font-semibold text-[#ccc]">
+                  Pending Approvals{" "}
+                  {pendingTxs.length > 0 && (
+                    <span className="text-[#888] font-normal">
+                      ({pendingTxs.length})
+                    </span>
+                  )}
+                </div>
+                {pendingTxs.length === 0 ? (
+                  <div className="text-center py-10 text-[#666] text-xs">
+                    No pending approvals.
+                  </div>
+                ) : (
+                  pendingTxs.map((tx) => (
+                    <div
+                      key={tx.id}
+                      className="p-4 border-b border-[#1f1f35] flex justify-between items-center text-xs"
+                    >
+                      <div>
+                        <code className="text-[#a78bfa]">{tx.landId}</code>
+                        <span className="text-[#888] ml-2">
+                          {cn(tx.seller)} → {cn(tx.buyer)} — Rs.{tx.price}
+                        </span>
+                        <div className="text-[#555] mt-1">
+                          Created: {tx.createdAt?.slice(0, 10)}
+                        </div>
+                      </div>
+                      <button
+                        className={`${btn} ${btnSuc} ${btnSm}`}
+                        onClick={() =>
+                          act("admin-approve", { txId: tx.id }, "l", "ls", "t")
+                        }
+                      >
+                        Approve Transfer
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </>
       )}
 
+      {/* Toast */}
       {toast && (
         <div
-          style={{
-            ...S.toast,
-            background: toast.ok ? "#1a3a1a" : "#3a1a1a",
-            border: `1px solid ${toast.ok ? "#22c55e" : "#ef4444"}`,
-            color: toast.ok ? "#86efac" : "#fca5a5",
-          }}
+          className={`fixed bottom-6 right-6 px-5 py-3 rounded-lg text-sm font-semibold z-50 animate-slide-up ${
+            toast.ok
+              ? "bg-green-900 border border-green-500 text-green-300"
+              : "bg-red-900 border border-red-500 text-red-300"
+          }`}
         >
           {toast.msg}
         </div>
       )}
-
-      <style jsx global>{`
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(12px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        input:focus,
-        select:focus {
-          outline: none;
-          border-color: #7c3aed !important;
-        }
-        button:hover {
-          opacity: 0.85;
-        }
-        button:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-        }
-        tr:hover {
-          background: #1f1f35 !important;
-        }
-      `}</style>
     </div>
   );
 }

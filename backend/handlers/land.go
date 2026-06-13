@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,99 +11,54 @@ import (
 	"github.com/ndhack/backend/models"
 )
 
-// LandHandler serves the land registry API.
 type LandHandler struct {
-	pool    *fabric.Pool
-	defOrg  string
-	defUser string
+	pool   *fabric.Pool
+	defOrg string
 }
 
-// NewLandHandler creates a LandHandler.
-func NewLandHandler(pool *fabric.Pool, defOrg, defUser string) *LandHandler {
-	return &LandHandler{pool: pool, defOrg: defOrg, defUser: defUser}
+func NewLandHandler(pool *fabric.Pool, defOrg string) *LandHandler {
+	return &LandHandler{pool: pool, defOrg: defOrg}
 }
 
-// ── Identity resolution ─────────────────────────────────────────────
-//
-// The client can pass X-Identity: org/user (e.g. "province1/User1").
-// Falls back to the default configured identity.
-
-func (h *LandHandler) resolveIdentity(c *gin.Context) (*fabric.Client, error) {
-	// Prefer JWT-derived identity set by middleware.
-	org, _ := c.Get("msp_org")
-	user, _ := c.Get("msp_user")
-
-	orgStr, _ := org.(string)
-	userStr, _ := user.(string)
-
-	if orgStr != "" && userStr != "" {
-		return h.pool.Get(orgStr, userStr)
-	}
-
-	// Fallback: X-Identity header (legacy).
-	if hdr := c.GetHeader("X-Identity"); hdr != "" {
-		var o, u string
-		o, u, _ = strings.Cut(hdr, "/")
-		if o != "" && u != "" {
-			return h.pool.Get(o, u)
-		}
-	}
-
-	// Ultimate fallback: default identity.
-	return h.pool.Get(h.defOrg, h.defUser)
-}
-
-// ── GET handlers ────────────────────────────────────────────────────
-
-func (h *LandHandler) GetAllLand(c *gin.Context) {
-	cli, err := h.resolveIdentity(c)
+func (h *LandHandler) getClient(c *gin.Context) (*fabric.Client, string) {
+	nid, _ := c.Get("msp_nid")
+	callerID, _ := nid.(string)
+	client, err := h.pool.Get(h.defOrg, "Admin")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
-		return
+		return nil, callerID
 	}
-	raw, err := cli.Evaluate("GetAllLand")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
-		return
-	}
-	sendJSON(c, raw)
+	return client, callerID
 }
+
+// ── GET ─────────────────────────────────────────────────────────────
 
 func (h *LandHandler) QueryLand(c *gin.Context) {
-	plotID := c.Query("id")
-	owner := c.Query("owner")
-	status := c.Query("status")
-	province := c.Query("province")
-	parent := c.Query("parent")
-	userID := c.Query("userId")
-
-	cli, err := h.resolveIdentity(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
+	cli, callerID := h.getClient(c)
+	if cli == nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: "backend not ready"})
 		return
 	}
 
+	plotID := c.Query("id")
+	action := c.Query("action")
 	var raw []byte
+	var err error
 
 	switch {
-	case userID != "":
-		raw, err = cli.Evaluate("GetUser", userID)
+	case action == "my-lands":
+		raw, err = cli.Evaluate("GetMyLands", callerID)
+	case action == "listings":
+		raw, err = cli.Evaluate("GetListings")
+	case action == "my-offers":
+		raw, err = cli.Evaluate("GetMyOffers", callerID)
+	case action == "my-transactions":
+		raw, err = cli.Evaluate("GetMyTransactions", callerID)
+	case action == "pending-transactions":
+		raw, err = cli.Evaluate("GetPendingTransactions")
+	case c.Query("landId") != "":
+		raw, err = cli.Evaluate("GetOffersForLand", callerID, c.Query("landId"))
 	case plotID != "":
 		raw, err = cli.Evaluate("QueryLand", plotID)
-	case owner != "":
-		raw, err = cli.Evaluate("GetLandByOwner", owner)
-	case status != "":
-		raw, err = cli.Evaluate("GetLandByStatus", status)
-	case province != "":
-		raw, err = cli.Evaluate("GetLandByProvince", province)
-	case parent != "":
-		raw, err = cli.Evaluate("GetChildrenOf", parent)
-	case c.Query("saleId") != "":
-		raw, err = cli.Evaluate("GetSaleProposal", c.Query("saleId"))
-	case c.Query("pendingApprovals") != "":
-		raw, err = cli.Evaluate("GetPendingApprovals")
-	case c.Query("mySales") != "":
-		raw, err = cli.Evaluate("GetMySaleProposals")
 	default:
 		raw, err = cli.Evaluate("GetAllLand")
 	}
@@ -116,7 +70,6 @@ func (h *LandHandler) QueryLand(c *gin.Context) {
 	sendJSON(c, raw)
 }
 
-// sendJSON ensures the response is never nil (Gin sends "null" for nil bytes).
 func sendJSON(c *gin.Context, raw []byte) {
 	if raw == nil {
 		c.Data(http.StatusOK, "application/json", []byte("[]"))
@@ -125,7 +78,7 @@ func sendJSON(c *gin.Context, raw []byte) {
 	c.Data(http.StatusOK, "application/json", raw)
 }
 
-// ── POST handler ────────────────────────────────────────────────────
+// ── POST ────────────────────────────────────────────────────────────
 
 func (h *LandHandler) PostAction(c *gin.Context) {
 	var req models.ActionRequest
@@ -134,60 +87,43 @@ func (h *LandHandler) PostAction(c *gin.Context) {
 		return
 	}
 
-	cli, err := h.resolveIdentity(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
+	cli, callerID := h.getClient(c)
+	if cli == nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: "backend not ready"})
 		return
 	}
 
 	switch req.Action {
 	case "register":
 		h.handleRegister(cli, c, &req)
-	case "split":
-		h.handleSplit(cli, c, &req)
-	case "register-user":
-		h.handleRegisterUser(cli, c, &req)
-	case "get-user":
-		h.handleGetUser(cli, c, &req)
-	case "update-user":
-		h.handleUpdateUser(cli, c, &req)
-	case "deactivate-user":
-		h.handleDeactivateUser(cli, c, &req)
-	case "activate-user":
-		h.handleActivateUser(cli, c, &req)
-	case "get-all-users":
-		h.handleGetAllUsers(cli, c, &req)
-	case "initiate-sale":
-		h.handleInitiateSale(cli, c, &req)
-	case "approve-sale":
-		h.handleApproveSale(cli, c, &req)
-	case "reject-sale":
-		h.handleRejectSale(cli, c, &req)
-	case "execute-sale":
-		h.handleExecuteSale(cli, c, &req)
+	case "list-for-sale":
+		h.handleListForSale(cli, callerID, c, &req)
+	case "cancel-listing":
+		h.handleCancelListing(cli, callerID, c, &req)
+	case "make-offer":
+		h.handleMakeOffer(cli, callerID, c, &req)
+	case "accept-offer":
+		h.handleAcceptOffer(cli, callerID, c, &req)
+	case "confirm-transaction":
+		h.handleConfirmTransaction(cli, callerID, c, &req)
+	case "reject-transaction":
+		h.handleRejectTransaction(cli, callerID, c, &req)
+	case "admin-approve":
+		h.handleAdminApprove(cli, c, &req)
 	default:
 		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "unknown action: " + req.Action})
 	}
 }
+
+// ── Admin ───────────────────────────────────────────────────────────
 
 func (h *LandHandler) handleRegister(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
 	if req.PlotID == "" || req.Owner == "" {
 		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "plotId + owner required"})
 		return
 	}
-	landType := req.LandType
-	if landType == "" {
-		landType = "residential"
-	}
-	_, err := cli.Submit("RegisterLand",
-		req.PlotID,
-		req.SurveyNumber,
-		req.Owner,
-		req.Location,
-		req.Province,
-		strconv.FormatFloat(req.Area, 'f', -1, 64),
-		landType,
-	)
+	_, err := cli.Submit("RegisterLand", req.PlotID, req.Owner, req.Location,
+		strconv.FormatFloat(req.Area, 'f', -1, 64))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return
@@ -195,17 +131,12 @@ func (h *LandHandler) handleRegister(cli *fabric.Client, c *gin.Context, req *mo
 	c.JSON(http.StatusOK, models.APIResponse{Success: true})
 }
 
-func (h *LandHandler) handleSplit(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
-	if req.PlotID == "" || len(req.Children) == 0 {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "plotId + children required"})
+func (h *LandHandler) handleAdminApprove(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
+	if req.TxID == "" {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "txId required"})
 		return
 	}
-	childrenJSON, err := json.Marshal(req.Children)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "invalid children: " + err.Error()})
-		return
-	}
-	_, err = cli.Submit("SplitLand", req.PlotID, string(childrenJSON))
+	_, err := cli.Submit("AdminApproveTransaction", req.TxID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return
@@ -213,14 +144,15 @@ func (h *LandHandler) handleSplit(cli *fabric.Client, c *gin.Context, req *model
 	c.JSON(http.StatusOK, models.APIResponse{Success: true})
 }
 
-// ── User management handlers ──────────────────────────────────────
+// ── Customer ────────────────────────────────────────────────────────
 
-func (h *LandHandler) handleRegisterUser(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
-	if req.UserID == "" || req.UserName == "" || req.UserRoles == "" {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "userId, name, roles required"})
+func (h *LandHandler) handleListForSale(cli *fabric.Client, cid string, c *gin.Context, req *models.ActionRequest) {
+	if req.LandID == "" {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "landId required"})
 		return
 	}
-	_, err := cli.Submit("RegisterUser", req.UserID, req.UserName, req.UserRoles)
+	_, err := cli.Submit("ListForSale", cid, req.LandID,
+		strconv.FormatFloat(req.Price, 'f', -1, 64))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return
@@ -228,29 +160,12 @@ func (h *LandHandler) handleRegisterUser(cli *fabric.Client, c *gin.Context, req
 	c.JSON(http.StatusOK, models.APIResponse{Success: true})
 }
 
-func (h *LandHandler) handleGetUser(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
-	userID := c.Query("userId")
-	if userID == "" {
-		userID = req.UserID
-	}
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "userId required"})
+func (h *LandHandler) handleCancelListing(cli *fabric.Client, cid string, c *gin.Context, req *models.ActionRequest) {
+	if req.LandID == "" {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "landId required"})
 		return
 	}
-	raw, err := cli.Evaluate("GetUser", userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
-		return
-	}
-	c.Data(http.StatusOK, "application/json", raw)
-}
-
-func (h *LandHandler) handleUpdateUser(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
-	if req.UserID == "" || req.UserRoles == "" {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "userId, roles required"})
-		return
-	}
-	_, err := cli.Submit("UpdateUserRoles", req.UserID, req.UserRoles)
+	_, err := cli.Submit("CancelListing", cid, req.LandID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return
@@ -258,12 +173,26 @@ func (h *LandHandler) handleUpdateUser(cli *fabric.Client, c *gin.Context, req *
 	c.JSON(http.StatusOK, models.APIResponse{Success: true})
 }
 
-func (h *LandHandler) handleDeactivateUser(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
-	if req.UserID == "" {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "userId required"})
+func (h *LandHandler) handleMakeOffer(cli *fabric.Client, cid string, c *gin.Context, req *models.ActionRequest) {
+	if req.LandID == "" || req.OfferedPrice <= 0 {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "landId + offeredPrice required"})
 		return
 	}
-	_, err := cli.Submit("DeactivateUser", req.UserID)
+	raw, err := cli.Submit("MakeOffer", cid, req.LandID,
+		strconv.FormatFloat(req.OfferedPrice, 'f', -1, 64))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: strings.Trim(string(raw), "\"")})
+}
+
+func (h *LandHandler) handleAcceptOffer(cli *fabric.Client, cid string, c *gin.Context, req *models.ActionRequest) {
+	if req.OfferID == "" {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "offerId required"})
+		return
+	}
+	_, err := cli.Submit("AcceptOffer", cid, req.OfferID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return
@@ -271,21 +200,12 @@ func (h *LandHandler) handleDeactivateUser(cli *fabric.Client, c *gin.Context, r
 	c.JSON(http.StatusOK, models.APIResponse{Success: true})
 }
 
-func (h *LandHandler) handleGetAllUsers(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
-	raw, err := cli.Evaluate("GetAllUsers")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
+func (h *LandHandler) handleConfirmTransaction(cli *fabric.Client, cid string, c *gin.Context, req *models.ActionRequest) {
+	if req.TxID == "" {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "txId required"})
 		return
 	}
-	c.Data(http.StatusOK, "application/json", raw)
-}
-
-func (h *LandHandler) handleActivateUser(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
-	if req.UserID == "" {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "userId required"})
-		return
-	}
-	_, err := cli.Submit("ActivateUser", req.UserID)
+	_, err := cli.Submit("ConfirmTransaction", cid, req.TxID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return
@@ -293,53 +213,12 @@ func (h *LandHandler) handleActivateUser(cli *fabric.Client, c *gin.Context, req
 	c.JSON(http.StatusOK, models.APIResponse{Success: true})
 }
 
-// ── Sale proposal handlers ─────────────────────────────────────────
-
-func (h *LandHandler) handleInitiateSale(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
-	if req.PlotID == "" || req.Buyer == "" {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "plotId + buyer required"})
+func (h *LandHandler) handleRejectTransaction(cli *fabric.Client, cid string, c *gin.Context, req *models.ActionRequest) {
+	if req.TxID == "" {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "txId required"})
 		return
 	}
-	raw, err := cli.Submit("InitiateSaleProposal", req.PlotID, req.Buyer, strconv.FormatFloat(req.Price, 'f', -1, 64))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: string(raw)})
-}
-
-func (h *LandHandler) handleApproveSale(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
-	if req.PlotID == "" {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "plotId (proposal ID) required"})
-		return
-	}
-	_, err := cli.Submit("ApproveSaleProposal", req.PlotID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, models.APIResponse{Success: true})
-}
-
-func (h *LandHandler) handleRejectSale(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
-	if req.PlotID == "" {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "plotId (proposal ID) + description (reason) required"})
-		return
-	}
-	_, err := cli.Submit("RejectSaleProposal", req.PlotID, req.Description)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, models.APIResponse{Success: true})
-}
-
-func (h *LandHandler) handleExecuteSale(cli *fabric.Client, c *gin.Context, req *models.ActionRequest) {
-	if req.PlotID == "" {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "plotId (proposal ID) required"})
-		return
-	}
-	_, err := cli.Submit("ExecuteSaleProposal", req.PlotID)
+	_, err := cli.Submit("RejectTransaction", cid, req.TxID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
 		return

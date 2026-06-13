@@ -7,15 +7,24 @@
 
 ## 1. Project Overview
 
-Private Hyperledger Fabric v2.5 land registry — fully containerized:
+Private land registry on Hyperledger Fabric v2.5 — 3 private organizations, fully containerized:
 
-- **3 provincial full nodes** (Province1–Province3) — test; scale to 11 for production
-- **77 malpots, buyers, sellers, officials** as lite nodes (connect via frontend)
-- **Go chaincode** `landreg` — 12 functions on-chain
-- **Go backend** in Docker — Fabric Gateway SDK (gRPC), per-user X.509 signing
-- **Next.js frontend** in Docker — proxies `/api/*` to backend container
-- **`rebuild.sh`** — one-command full lifecycle (crypto → channel → chaincode → seed)
+- **3 private orgs** (Org1–Org3) — each with 1 peer, admin + customer users
+- **Endorsement**: `OutOf(2, ...)` — any 2 of 3 peers must endorse
+- **Roles**: **Admin** (register land, approve transactions) and **Customer** (buy/sell/make offers) — derived from X.509 cert OU
+- **Go chaincode** `landreg` — 15 focused functions on-chain
+- **Go backend** — Fabric Gateway SDK (gRPC), per-user X.509 signing
+- **JWT auth** with **SQLite** user store (signup/login, 8 seeded dummy users)
 - **7 Docker services** — orderer, 3 peers, CLI, backend, frontend
+- **No on-chain RBAC** — trust is via MSP cert OUs (admin vs client)
+
+### Workflow
+
+```
+Admin registers land ──► Owner lists for sale (with price)
+     Buyer makes offer ──► Owner accepts offer
+          Buyer confirms ──► Admin approves ──► Transfer executes
+```
 
 ---
 
@@ -32,62 +41,60 @@ Private Hyperledger Fabric v2.5 land registry — fully containerized:
 
 | File | Role |
 |------|------|
-| `crypto-config.yaml` | 3 province orgs (Province1–Province3), 1 peer each, 2 users each |
-| `configtx.yaml` | Committed to git. 3 orgs, `OutOf(3, ...)` endorsement, RAFT consensus |
-| `docker-compose.yaml` | 7 services: orderer + 3 peers + CLI + backend + frontend. Ports: 7051/8051/9051 |
-| `core.yaml` | Reference peer config — **not actively used** |
-| `orderer.yaml` | Reference orderer config — **not actively used** |
+| `crypto-config.yaml` | 3 orgs (Org1–Org3), 1 peer each, admin + User1 each |
+| `configtx.yaml` | 3 orgs, `OutOf(2, ...)` endorsement, RAFT consensus |
+| `docker-compose.yaml` | 7 services: orderer + 3 peers + CLI + backend + frontend |
 
-**Key compose patterns** (per peer `province${i}`):
+**Key compose patterns** (per peer `org${i}`):
 - Peer port: `7051 + (i-1)*1000`, chaincode port: peer + 1
-- MSP ID: `Province${i}MSP`
+- MSP ID: `Org${i}MSP`
 - Network: `fabric-net` (explicit `name:` to avoid prefix)
-- CLI volume mount: `../backend/chaincode:/opt/gopath/.../peer/chaincode`
 
 ### 2.3 Go Backend (`backend/`)
 
 | File | Role |
 |------|------|
-| `Dockerfile` | Multi-stage: `golang:1.22-alpine` builder → `alpine:3.20` runtime (12 MB) |
-| `main.go` | HTTP server (Gin), routes, CORS, graceful shutdown |
-| `config/config.go` | Auto-detects Docker (`/.dockerenv`) vs host. Docker mode: TLS verify ON, peer DNS |
+| `Dockerfile` | Multi-stage: `golang:1.22-alpine` → `alpine:3.20` (pure-Go SQLite, no CGO) |
+| `main.go` | HTTP server (Gin), routes, JWT middleware, graceful shutdown |
+| `config/config.go` | Auto-detects Docker vs host mode |
 | `fabric/client.go` | Gateway client pool — lazy per-identity connections, gRPC |
-| `fabric/identity.go` | Loads X.509 identities from MSP dirs (handles `User1@org-cert.pem` and `cert.pem`) |
-| `handlers/land.go` | All 13 REST API endpoints + `sendJSON` nil-guard |
-| `models/models.go` | Request/response DTOs |
-| `go.mod` | Module `github.com/ndhack/backend`, deps: `fabric-gateway v1.5.1`, `gin v1.10.0`, `grpc` |
-
-**Identity pool**: Clients keyed by `"{org}/{user}"`. Created lazily, cached with `sync.RWMutex`. Default identity from env `FABRIC_ORG`/`FABRIC_USER`.
-
-**Docker connection**: gRPC to `peer0.province1.example.com:7051` (Docker DNS = cert SAN). TLS verification ON — no skip needed. Endorsement via service discovery.
+| `fabric/identity.go` | Loads X.509 identities from MSP dirs |
+| `auth/auth.go` | JWT auth with SQLite user store, signup, seed data |
+| `handlers/land.go` | 9 REST handlers for land + sale workflow |
+| `models/models.go` | ActionRequest + APIResponse DTOs |
+| `go.mod` | Module `github.com/ndhack/backend`, deps: `fabric-gateway v1.5.1`, `gin v1.10.0`, `modernc.org/sqlite`, `jwt/v5` |
 
 ### 2.4 Chaincode (`backend/chaincode/go/landreg/`)
 
 | File | Role |
 |------|------|
-| `landreg.go` | 12 functions using `fabric-contract-api-go/v2` |
+| `landreg.go` | 15 functions using `fabric-contract-api-go/v2` |
 | `go.mod` | Module `github.com/ndhack/landreg`, Go 1.22 |
 
-**LandRecord struct**:
-```go
-type LandRecord struct {
-    PlotID, SurveyNumber, Owner, PreviousOwner string
-    Location, Province                          string
-    Area                                        float64
-    LandType                                    string
-    Status         string  // "active", "mortgaged", "disputed", "split"
-    ParentPlotID   string  `json:",omitempty"`
-    Mortgage       *MortgageInfo
-    Dispute        *DisputeInfo
-    TransferCount  int
-    LastTransfer   *TransferRecord
-    RegisteredDate string
-}
-```
+**Data types**: `LandRecord`, `TransferRecord`, `SaleListing`, `BuyerOffer`, `Transaction`
 
-Query functions return `string` (raw JSON) to avoid schema validation rejecting `null` for optional pointer fields.
+**Chaincode functions**:
+- **Admin**: `RegisterLand`, `AdminApproveTransaction`
+- **Customer**: `ListForSale`, `CancelListing`, `MakeOffer`, `AcceptOffer`, `ConfirmTransaction`, `RejectTransaction`
+- **Queries**: `GetAllLand`, `QueryLand`, `GetMyLands`, `GetListings`, `GetMyOffers`, `GetOffersForLand`, `GetPendingTransactions`, `GetMyTransactions`
 
-### 2.5 Frontend (`frontend/`)
+### 2.5 Auth Store (`auth/`)
+
+SQLite database at `backend/data/landreg.db` (auto-created on startup).
+
+**Seeded users** (all passwords match usernames + "123": `admin123`, `alice123`, etc.):
+
+| Username | Org | MSP User | Role |
+|----------|-----|----------|------|
+| admin | org1 | Admin | admin |
+| alice | org1 | User1 | customer |
+| bob | org1 | User1 | customer |
+| carol | org2 | User1 | customer |
+| dave | org2 | User1 | customer |
+| eve | org3 | User1 | customer |
+| frank | org3 | User1 | customer |
+
+### 2.6 Frontend (`frontend/`)
 
 | File | Role |
 |------|------|
@@ -97,99 +104,17 @@ Query functions return `string` (raw JSON) to avoid schema validation rejecting 
 | `next.config.js` | Rewrites `/api/*` → `${BACKEND_URL}/api/*` (Docker DNS: `backend:8080`) |
 | `package.json` | `next`, `react`, `react-dom` only |
 
-### 2.6 Scripts (`scripts/`)
+### 2.7 Scripts (`scripts/`)
 
 | Script | Role |
 |--------|------|
-| `rebuild.sh` | Full lifecycle: tear down → chaincode deps → cryptogen → configtxgen → **docker compose build + up** → channel + anchors → chaincode install/approve/commit → seed via curl |
-| `quickstart.sh` | `docker compose up -d --build` (10 lines) |
-| `stop.sh` | `docker compose down -v --remove-orphans` (5 lines) |
-
-**`rebuild.sh` key details**:
-- Step 6: `docker compose build` + `docker compose up -d` — builds Go + Node images
-- No host-based `go build` or `npm install` — everything in Docker
-- Step 10: Probes backend with test transaction, retries up to 30s
-- Step 10: Seeds 4 plots via `curl`, retries each up to 5 times
-- `docker exec cli` only for admin: channel join, anchors, chaincode lifecycle
-
-### 2.7 `.gitignore`
-
-Ignores: `node_modules/`, `.next/`, `*.tar.gz`, `*.sum`, `vendor/`, `backend/server`, `backend/go.sum`, `backend/backend.log`, `organizations/`, `channel-artifacts/`, `*.log`, `.env`
+| `rebuild.sh` | Full lifecycle: tear down → chaincode deps → cryptogen → configtxgen → build + up → channel + anchors → chaincode install/approve/commit → seed |
+| `quickstart.sh` | `docker compose up -d --build` |
+| `stop.sh` | `docker compose down -v --remove-orphans` |
 
 ---
 
-## 3. File Dependency Graph
-
-```
-crypto-config.yaml ──► rebuild.sh ──► organizations/
-                         │
-configtx.yaml (git) ──► configtxgen ──► channel-artifacts/
-                         │
-docker-compose.yaml ──► docker compose build ──► backend + frontend images
-docker-compose.yaml ──► docker compose up ──► 7 containers
-                         │
-landreg.go ──► peer chaincode install/approve/commit ──► chaincode live
-                         │
-backend container ◄── gRPC to peer0.province1.example.com:7051
-       │
-       └── handlers/land.go ◄── HTTP :8080
-                         │
-frontend container ◄── proxy /api/* → backend:8080
-       │
-       └── page.js ◄── fetch(/api/land)
-```
-
----
-
-## 4. Modification Patterns
-
-### 4.1 Scale to 11 provinces
-
-Change `3` → `11` in:
-1. `network/crypto-config.yaml` — add Province4–Province11
-2. `scripts/rebuild.sh` — `seq 1 3` → `seq 1 11`
-3. `network/configtx.yaml` — `OutOf(3, ...)` → `OutOf(9, ...)`
-4. Run `./scripts/rebuild.sh`
-
-Backend connects to one gateway peer — no changes. Endorsement auto-collected.
-
-### 4.2 Add a chaincode function
-
-1. Add method to `SmartContract` in `backend/chaincode/go/landreg/landreg.go`
-2. Add handler in `backend/handlers/land.go` (Evaluate for queries, Submit for invokes)
-3. Add action case in `PostAction` switch
-4. Add UI in `frontend/app/page.js`
-5. Run `./scripts/rebuild.sh`
-
-### 4.3 Add a field to LandRecord
-
-1. Add to `LandRecord` struct in `landreg.go` with json tag
-2. Update registration/transfer functions if needed
-3. Update frontend forms
-4. Run `./scripts/rebuild.sh`
-
-### 4.4 Add new identity
-
-1. Increase `Users: { Count: N }` in `network/crypto-config.yaml`
-2. Run `./scripts/rebuild.sh` (regenerates MSP certs)
-3. Use `X-Identity: province1/User3` header
-
----
-
-## 5. Port Map
-
-| Service | Host Port | Container |
-|---------|-----------|-----------|
-| orderer | 7050 | orderer.example.com |
-| Province1 peer | 7051/7052 | peer0.province1.example.com |
-| Province2 peer | 8051/8052 | peer0.province2.example.com |
-| Province3 peer | 9051/9052 | peer0.province3.example.com |
-| Backend | 8080 | landreg-backend |
-| Frontend | 3000 | landreg-frontend |
-
----
-
-## 6. API Reference (Go Backend)
+## 3. API Reference (Go Backend)
 
 ### GET /api/land
 
@@ -197,10 +122,12 @@ Backend connects to one gateway peer — no changes. Endorsement auto-collected.
 |-------------|--------------------|
 | _(none)_ | `GetAllLand` |
 | `?id=X` | `QueryLand(X)` |
-| `?owner=X` | `GetLandByOwner(X)` |
-| `?status=X` | `GetLandByStatus(X)` |
-| `?province=X` | `GetLandByProvince(X)` |
-| `?parent=X` | `GetChildrenOf(X)` |
+| `?action=my-lands` | `GetMyLands` |
+| `?action=listings` | `GetListings` |
+| `?action=my-offers` | `GetMyOffers` |
+| `?action=my-transactions` | `GetMyTransactions` |
+| `?action=pending-transactions` | `GetPendingTransactions` |
+| `?landId=X` | `GetOffersForLand(X)` |
 
 ### POST /api/land
 
@@ -208,44 +135,69 @@ Body: `{"action": "<action>", ...fields}`
 
 | action | Required fields | Chaincode function |
 |--------|----------------|--------------------|
-| `register` | `plotId`, `owner` | `RegisterLand` |
-| `transfer` | `plotId`, `buyer` | `TransferLand` |
-| `split` | `plotId`, `children` | `SplitLand` |
-| `mortgage` | `plotId`, `bank` | `SetMortgage` |
-| `clear-mortgage` | `plotId` | `ClearMortgage` |
-| `dispute` | `plotId`, `caseNumber` | `FileDispute` |
-| `resolve-dispute` | `plotId` | `ResolveDispute` |
+| `register` | `plotId`, `owner`, `location`, `area` | `RegisterLand` |
+| `list-for-sale` | `landId`, `price` | `ListForSale` |
+| `cancel-listing` | `landId` | `CancelListing` |
+| `make-offer` | `landId`, `offeredPrice` | `MakeOffer` |
+| `accept-offer` | `offerId` | `AcceptOffer` |
+| `confirm-transaction` | `txId` | `ConfirmTransaction` |
+| `reject-transaction` | `txId` | `RejectTransaction` |
+| `admin-approve` | `txId` | `AdminApproveTransaction` |
 
-### Headers
+### Auth endpoints
 
-| Header | Purpose |
-|--------|---------|
-| `X-Identity: org/user` | Sign as specific user (e.g. `province2/User1`) |
-| _(none)_ | Default identity (`province1/Admin` in Docker) |
+| Method | Path | Body | Purpose |
+|--------|------|------|---------|
+| POST | `/api/login` | `{ username, password }` | Returns JWT + user info |
+| POST | `/api/signup` | `{ username, password, name, org, role }` | Create new user |
 
----
-
-## 7. Known Issues & Fixes
-
-| Issue | Symptom | Fix |
-|-------|---------|-----|
-| `fabric-net` not found | Chaincode launch fails | `name: fabric-net` + `COMPOSE_PROJECT_NAME=fabric` |
-| `etcdraft config missing` | Genesis fails | `EtcdRaft.Consenters` must be present in configtx |
-| Schema validation | Query returns error | Query functions return `string` (raw JSON) |
-| Literal `\n` in YAML | configtxgen parse error | Use `$'\n'` (ANSI-C quoting) |
-| `go mod tidy` fails (chaincode) | Bad pseudo-version | Use `fabric-contract-api-go/v2 v2.0.0` |
-| Gateway connection refused | Chaincode not committed yet | Wait for commit; rebuild retries seed up to 30s |
-| `creator org unknown` | Crypto/channel mismatch | Run `./scripts/rebuild.sh` (full sync) |
-| Empty API response (`[]`) | Seed failed silently | Rebuild now retries seed; manual: `curl -X POST :8080/api/land -d '{...}'` |
+Auth is required via `Authorization: Bearer <token>` header on all `/api/*` endpoints except `/health`, `/api/login`, `/api/signup`.
 
 ---
 
-## 8. Generated / Git-Ignored
+## 4. Port Map
 
-| Path | Created by | Contents |
-|------|-----------|----------|
-| `network/organizations/` | cryptogen | MSP certs, keys, TLS |
-| `network/channel-artifacts/` | configtxgen | genesis.block, channel.tx, anchor .tx |
-| `backend/go.sum` | `go mod tidy` | Dependency checksums |
-| `frontend/.next/` | Next.js | Build output |
-| `frontend/node_modules/` | npm | Dependencies |
+| Service | Host Port | Container |
+|---------|-----------|-----------|
+| orderer | 7050 | orderer.example.com |
+| Org1 peer | 7051/7052 | peer0.org1.example.com |
+| Org2 peer | 8051/8052 | peer0.org2.example.com |
+| Org3 peer | 9051/9052 | peer0.org3.example.com |
+| Backend | 8080 | landreg-backend |
+| Frontend | 3000 | landreg-frontend |
+
+---
+
+## 5. Implementation Summary
+
+### Network
+- 3 orgs renamed from Province1-3 → Org1-3
+- Endorsement policy: `OutOf(2, 'Org1MSP.peer', 'Org2MSP.peer', 'Org3MSP.peer')`
+- All TLS, docker-compose, configtx references updated
+
+### Chaincode
+- Removed: on-chain RBAC (User records, RegisterUser, etc.), province, survey/malpot/official roles, mortgage, dispute, land split, multi-approval sale proposals
+- Added: `SaleListing`, `BuyerOffer`, `Transaction` types with full sale workflow
+- Auth via X.509 cert OU: `isAdmin()` checks for OU=admin
+- 15 functions covering register, list, offer, accept, confirm, approve, reject + queries
+
+### Backend
+- SQLite auth store with signup/login
+- 8 seeded dummy users across 3 orgs
+- JWT-only auth (no X-Identity header)
+- `/api/signup` endpoint for user registration
+- Clean handlers mapped to new chaincode API
+
+### Auth
+- Removed: hardcoded credentials, X-Identity header fallback
+- Added: `auth.InitDB()`, `auth.Signup()`, SQLite persistence
+- Users table: id, username, password_hash, display_name, org, msp_user, role
+
+### Stripped/Removed
+- Government concepts (provinces, malpots, officials, surveyors)
+- On-chain user management (RegisterUser, UpdateUserRoles, etc.)
+- Mortgage, dispute, land split functionality
+- Multi-party sale proposal workflow (approvals map)
+- Province, SurveyNumber, LandType, ParentPlotID fields
+- Legacy X-Identity header
+- Hardcoded credential map

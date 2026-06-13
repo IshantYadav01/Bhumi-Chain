@@ -1,31 +1,15 @@
-# ---------------------------------------------------------------------------
-# crypto-config.yaml — 3 Provincial Full Nodes (test)
-# 77 Malpots, buyers, sellers, officials = lite nodes (connect via SDK)
-# Scale to 11 provinces for production.
-# ---------------------------------------------------------------------------
-
+# crypto-config.yaml — 1 Org (LandReg), 3 peers, admin + many customers
 OrdererOrgs:
   - Name: Orderer
-    Domain: example.com
+    Domain: landreg.com
     EnableNodeOUs: true
     Specs:
       - Hostname: orderer
 
 PeerOrgs:
-  - Name: Province1
-    Domain: province1.example.com
+  - Name: LandReg
+    Domain: landreg.com
     EnableNodeOUs: true
-    Template: { Count: 1 }
-    Users: { Count: 2 }
-
-  - Name: Province2
-    Domain: province2.example.com
-    EnableNodeOUs: true
-    Template: { Count: 1 }
-    Users: { Count: 2 }
-
-  - Name: Province3
-    Domain: province3.example.com
-    EnableNodeOUs: true
-    Template: { Count: 1 }
-    Users: { Count: 2 }
+    Template: { Count: 3 }
+    Users:
+      Count: 10

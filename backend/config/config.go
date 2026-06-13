@@ -14,21 +14,21 @@ type Config struct {
 	ChaincodeName string // e.g. "landreg"
 
 	// Gateway peer connection
-	GatewayPeer   string // e.g. "peer0.province1.example.com:7051" (Docker) or "localhost:7051" (host)
+	GatewayPeer   string // e.g. "peer0.org1.example.com:7051" (Docker) or "localhost:7051" (host)
 	PeerTLSCACert string // path to peer org's TLS CA cert
-	TLSSkipVerify bool   // skip hostname verification (host mode: localhost != peer0.province1.example.com)
+	TLSSkipVerify bool   // skip hostname verification (host mode)
 
 	// Crypto base path
 	CryptoPath string // e.g. "/organizations" (Docker) or "../network/organizations" (host)
-}
 
-// DefaultIdentity returns the default gateway identity (org, user).
-func DefaultIdentity() (org, user string) {
-	return os.Getenv("FABRIC_ORG"), os.Getenv("FABRIC_USER")
+	// Single org
+	Org string
+
+	// SQLite database path
+	DBPath string
 }
 
 // Load returns a Config populated from environment variables with sensible defaults.
-// Detects Docker vs host mode automatically.
 func Load() *Config {
 	inDocker := isDocker()
 	projRoot := findProjectRoot()
@@ -37,19 +37,22 @@ func Load() *Config {
 		ListenPort:    envOrDefault("BACKEND_PORT", ":8080"),
 		ChannelID:     envOrDefault("CHANNEL_ID", "mychannel"),
 		ChaincodeName: envOrDefault("CHAINCODE_NAME", "landreg"),
+		DBPath:        envOrDefault("DB_PATH", filepath.Join(projRoot, "backend/data/landreg.db")),
 	}
 
+	cfg.Org = envOrDefault("FABRIC_ORG", "landreg")
+
 	if inDocker {
-		cfg.GatewayPeer = envOrDefault("GATEWAY_PEER", "peer0.province1.example.com:7051")
+		cfg.GatewayPeer = envOrDefault("GATEWAY_PEER", "peer0.landreg.com:7051")
 		cfg.PeerTLSCACert = envOrDefault("PEER_TLS_CA_CERT",
-			"/organizations/peerOrganizations/province1.example.com/peers/peer0.province1.example.com/tls/ca.crt")
-		cfg.TLSSkipVerify = false // hostname matches cert SAN in Docker
+			"/organizations/peerOrganizations/landreg.com/peers/peer0.landreg.com/tls/ca.crt")
+		cfg.TLSSkipVerify = false
 		cfg.CryptoPath = envOrDefault("CRYPTO_PATH", "/organizations")
 	} else {
 		cfg.GatewayPeer = envOrDefault("GATEWAY_PEER", "localhost:7051")
 		cfg.PeerTLSCACert = envOrDefault("PEER_TLS_CA_CERT",
-			filepath.Join(projRoot, "network/organizations/peerOrganizations/province1.example.com/peers/peer0.province1.example.com/tls/ca.crt"))
-		cfg.TLSSkipVerify = true // localhost != peer0.province1.example.com
+			filepath.Join(projRoot, "network/organizations/peerOrganizations/landreg.com/peers/peer0.landreg.com/tls/ca.crt"))
+		cfg.TLSSkipVerify = true
 		cfg.CryptoPath = envOrDefault("CRYPTO_PATH", filepath.Join(projRoot, "network/organizations"))
 	}
 
@@ -63,7 +66,6 @@ func envOrDefault(key, def string) string {
 	return def
 }
 
-// isDocker returns true if running inside a Docker container.
 func isDocker() bool {
 	if os.Getenv("DOCKER_ENV") == "1" {
 		return true
@@ -74,8 +76,6 @@ func isDocker() bool {
 	return false
 }
 
-// findProjectRoot walks up from the working directory to find the
-// project root (the directory containing backend/, network/, etc.).
 func findProjectRoot() string {
 	if r := os.Getenv("PROJECT_ROOT"); r != "" {
 		return r

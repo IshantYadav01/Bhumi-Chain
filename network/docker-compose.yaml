@@ -4,8 +4,8 @@ networks:
     driver: bridge
 
 services:
-  orderer.example.com:
-    container_name: orderer.example.com
+  orderer.landreg.com:
+    container_name: orderer.landreg.com
     image: hyperledger/fabric-orderer:2.5
     environment:
       - FABRIC_LOGGING_SPEC=INFO
@@ -26,25 +26,25 @@ services:
     working_dir: /root
     command: orderer
     volumes:
-      - ./organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp:/etc/hyperledger/fabric/msp:z
-      - ./organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls:/etc/hyperledger/fabric/tls:z
+      - ./organizations/ordererOrganizations/landreg.com/orderers/orderer.landreg.com/msp:/etc/hyperledger/fabric/msp:z
+      - ./organizations/ordererOrganizations/landreg.com/orderers/orderer.landreg.com/tls:/etc/hyperledger/fabric/tls:z
       - ./channel-artifacts/genesis.block:/etc/hyperledger/fabric/genesis.block:z
-      - orderer.example.com:/var/hyperledger/production/orderer
+      - orderer.landreg.com:/var/hyperledger/production/orderer
     ports: ["7050:7050", "7053:7053"]
     networks: [fabric-net]
-  peer0.province1.example.com:
-    container_name: peer0.province1.example.com
+  peer0.landreg.com:
+    container_name: peer0.landreg.com
     image: hyperledger/fabric-peer:2.5
     environment:
       - FABRIC_LOGGING_SPEC=INFO
-      - CORE_PEER_ID=peer0.province1.example.com
-      - CORE_PEER_ADDRESS=peer0.province1.example.com:7051
+      - CORE_PEER_ID=peer0.landreg.com
+      - CORE_PEER_ADDRESS=peer0.landreg.com:7051
       - CORE_PEER_LISTENADDRESS=0.0.0.0:7051
-      - CORE_PEER_CHAINCODEADDRESS=peer0.province1.example.com:7052
+      - CORE_PEER_CHAINCODEADDRESS=peer0.landreg.com:7052
       - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052
-      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.province1.example.com:7051
-      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.province1.example.com:7051
-      - CORE_PEER_LOCALMSPID=Province1MSP
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.landreg.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.landreg.com:7051
+      - CORE_PEER_LOCALMSPID=LandRegMSP
       - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
       - CORE_PEER_TLS_ENABLED=true
       - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
@@ -60,25 +60,25 @@ services:
     command: peer node start
     volumes:
       - /var/run/docker.sock:/host/var/run/docker.sock
-      - ./organizations/peerOrganizations/province1.example.com/peers/peer0.province1.example.com/msp:/etc/hyperledger/fabric/msp:z
-      - ./organizations/peerOrganizations/province1.example.com/peers/peer0.province1.example.com/tls:/etc/hyperledger/fabric/tls:z
-      - peer0.province1.example.com:/var/hyperledger/production
+      - ./organizations/peerOrganizations/landreg.com/peers/peer0.landreg.com/msp:/etc/hyperledger/fabric/msp:z
+      - ./organizations/peerOrganizations/landreg.com/peers/peer0.landreg.com/tls:/etc/hyperledger/fabric/tls:z
+      - peer0.landreg.com:/var/hyperledger/production
     ports: ["7051:7051", "7052:7052"]
-    depends_on: [orderer.example.com]
+    depends_on: [orderer.landreg.com]
     networks: [fabric-net]
-  peer0.province2.example.com:
-    container_name: peer0.province2.example.com
+  peer1.landreg.com:
+    container_name: peer1.landreg.com
     image: hyperledger/fabric-peer:2.5
     environment:
       - FABRIC_LOGGING_SPEC=INFO
-      - CORE_PEER_ID=peer0.province2.example.com
-      - CORE_PEER_ADDRESS=peer0.province2.example.com:8051
+      - CORE_PEER_ID=peer1.landreg.com
+      - CORE_PEER_ADDRESS=peer1.landreg.com:8051
       - CORE_PEER_LISTENADDRESS=0.0.0.0:8051
-      - CORE_PEER_CHAINCODEADDRESS=peer0.province2.example.com:8052
+      - CORE_PEER_CHAINCODEADDRESS=peer1.landreg.com:8052
       - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:8052
-      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.province2.example.com:8051
-      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.province2.example.com:8051
-      - CORE_PEER_LOCALMSPID=Province2MSP
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.landreg.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer1.landreg.com:8051
+      - CORE_PEER_LOCALMSPID=LandRegMSP
       - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
       - CORE_PEER_TLS_ENABLED=true
       - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
@@ -94,25 +94,25 @@ services:
     command: peer node start
     volumes:
       - /var/run/docker.sock:/host/var/run/docker.sock
-      - ./organizations/peerOrganizations/province2.example.com/peers/peer0.province2.example.com/msp:/etc/hyperledger/fabric/msp:z
-      - ./organizations/peerOrganizations/province2.example.com/peers/peer0.province2.example.com/tls:/etc/hyperledger/fabric/tls:z
-      - peer0.province2.example.com:/var/hyperledger/production
+      - ./organizations/peerOrganizations/landreg.com/peers/peer1.landreg.com/msp:/etc/hyperledger/fabric/msp:z
+      - ./organizations/peerOrganizations/landreg.com/peers/peer1.landreg.com/tls:/etc/hyperledger/fabric/tls:z
+      - peer1.landreg.com:/var/hyperledger/production
     ports: ["8051:8051", "8052:8052"]
-    depends_on: [orderer.example.com]
+    depends_on: [orderer.landreg.com]
     networks: [fabric-net]
-  peer0.province3.example.com:
-    container_name: peer0.province3.example.com
+  peer2.landreg.com:
+    container_name: peer2.landreg.com
     image: hyperledger/fabric-peer:2.5
     environment:
       - FABRIC_LOGGING_SPEC=INFO
-      - CORE_PEER_ID=peer0.province3.example.com
-      - CORE_PEER_ADDRESS=peer0.province3.example.com:9051
+      - CORE_PEER_ID=peer2.landreg.com
+      - CORE_PEER_ADDRESS=peer2.landreg.com:9051
       - CORE_PEER_LISTENADDRESS=0.0.0.0:9051
-      - CORE_PEER_CHAINCODEADDRESS=peer0.province3.example.com:9052
+      - CORE_PEER_CHAINCODEADDRESS=peer2.landreg.com:9052
       - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:9052
-      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.province3.example.com:9051
-      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.province3.example.com:9051
-      - CORE_PEER_LOCALMSPID=Province3MSP
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.landreg.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer2.landreg.com:9051
+      - CORE_PEER_LOCALMSPID=LandRegMSP
       - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
       - CORE_PEER_TLS_ENABLED=true
       - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
@@ -128,11 +128,11 @@ services:
     command: peer node start
     volumes:
       - /var/run/docker.sock:/host/var/run/docker.sock
-      - ./organizations/peerOrganizations/province3.example.com/peers/peer0.province3.example.com/msp:/etc/hyperledger/fabric/msp:z
-      - ./organizations/peerOrganizations/province3.example.com/peers/peer0.province3.example.com/tls:/etc/hyperledger/fabric/tls:z
-      - peer0.province3.example.com:/var/hyperledger/production
+      - ./organizations/peerOrganizations/landreg.com/peers/peer2.landreg.com/msp:/etc/hyperledger/fabric/msp:z
+      - ./organizations/peerOrganizations/landreg.com/peers/peer2.landreg.com/tls:/etc/hyperledger/fabric/tls:z
+      - peer2.landreg.com:/var/hyperledger/production
     ports: ["9051:9051", "9052:9052"]
-    depends_on: [orderer.example.com]
+    depends_on: [orderer.landreg.com]
     networks: [fabric-net]
   cli:
     container_name: cli
@@ -142,12 +142,12 @@ services:
     environment:
       - GOPATH=/opt/gopath
       - CORE_PEER_ID=cli
-      - CORE_PEER_ADDRESS=peer0.province1.example.com:7051
-      - CORE_PEER_LOCALMSPID=Province1MSP
+      - CORE_PEER_ADDRESS=peer0.landreg.com:7051
+      - CORE_PEER_LOCALMSPID=LandRegMSP
       - CORE_PEER_TLS_ENABLED=true
-      - CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/province1.example.com/peers/peer0.province1.example.com/tls/ca.crt
-      - CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/province1.example.com/users/Admin@province1.example.com/msp
-      - ORDERER_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+      - CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/landreg.com/peers/peer0.landreg.com/tls/ca.crt
+      - CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/peerOrganizations/landreg.com/users/Admin@landreg.com/msp
+      - ORDERER_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations/ordererOrganizations/landreg.com/orderers/orderer.landreg.com/msp/tlscacerts/tlsca.landreg.com-cert.pem
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
     command: /bin/bash
     volumes:
@@ -156,9 +156,9 @@ services:
       - ./channel-artifacts:/opt/gopath/src/github.com/hyperledger/fabric/peer/channel-artifacts:z
       - ../backend/chaincode:/opt/gopath/src/github.com/hyperledger/fabric/peer/chaincode:z
     depends_on:
-      - peer0.province1.example.com
-      - peer0.province2.example.com
-      - peer0.province3.example.com
+      - peer0.landreg.com
+      - peer1.landreg.com
+      - peer2.landreg.com
     networks: [fabric-net]
   backend:
     container_name: landreg-backend
@@ -168,19 +168,20 @@ services:
     image: ndhack-backend:latest
     environment:
       - DOCKER_ENV=1
-      - FABRIC_ORG=province1
+      - FABRIC_ORG=landreg
       - FABRIC_USER=Admin
-      - GATEWAY_PEER=peer0.province1.example.com:7051
+      - GATEWAY_PEER=peer0.landreg.com:7051
       - CRYPTO_PATH=/organizations
-      - PEER_TLS_CA_CERT=/organizations/peerOrganizations/province1.example.com/peers/peer0.province1.example.com/tls/ca.crt
+      - PEER_TLS_CA_CERT=/organizations/peerOrganizations/landreg.com/peers/peer0.landreg.com/tls/ca.crt
       - PROJECT_ROOT=/
+      - DB_PATH=/app/data/landreg.db
     volumes:
       - ./organizations:/organizations:ro,z
     ports: ["8080:8080"]
     depends_on:
-      - peer0.province1.example.com
-      - peer0.province2.example.com
-      - peer0.province3.example.com
+      - peer0.landreg.com
+      - peer1.landreg.com
+      - peer2.landreg.com
     networks: [fabric-net]
   frontend:
     container_name: landreg-frontend
@@ -195,7 +196,7 @@ services:
     networks: [fabric-net]
 
 volumes:
-  orderer.example.com:
-  peer0.province1.example.com:
-  peer0.province2.example.com:
-  peer0.province3.example.com:
+  orderer.landreg.com:
+  peer0.landreg.com:
+  peer1.landreg.com:
+  peer2.landreg.com:

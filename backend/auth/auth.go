@@ -1,125 +1,90 @@
-// Package auth provides JWT-based authentication for the land-registry API.
-//
-// Users authenticate with username/password.  On success the server
-// returns a signed JWT that encodes the user's MSP identity
-// (org + user).  Protected endpoints extract the identity from the
-// JWT instead of trusting a client-supplied X-Identity header.
-//
-// Credentials are hard-coded for the demo.  In production you would
-// replace the userStore with a database or an external IdP.
-
+// Package auth provides JWT-based authentication with SQLite user store.
+// Each user is identified by their NID (National ID number).
 package auth
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	_ "modernc.org/sqlite"
 )
 
-// ── Token claims ──────────────────────────────────────────────────────
-
-// Claims are embedded in every JWT issued by this service.
+// Claims are embedded in every JWT.
 type Claims struct {
-	Org  string `json:"org"`  // e.g. "province1"
-	User string `json:"user"` // e.g. "Admin"
+	NID string `json:"nid"`
 	jwt.RegisteredClaims
 }
 
-// Identity returns the (org, user) tuple for MSP resolution.
-func (c Claims) Identity() (org, user string) {
-	return c.Org, c.User
-}
-
-// ── Credential store ──────────────────────────────────────────────────
-
-type credential struct {
-	PasswordHash string   // bcrypt hash
-	Org          string   // MSP org
-	User         string   // MSP user
-	Name         string   // display name
-	Roles        []string // on-chain roles (mirrored for UI)
-}
-
-// UserInfo is returned to the frontend after successful login.
+// UserInfo returned after login.
 type UserInfo struct {
-	Username string   `json:"username"`
-	Name     string   `json:"name"`
-	Org      string   `json:"org"`
-	Roles    []string `json:"roles"`
+	NID  string `json:"nid"`
+	Name string `json:"name"`
+	Role string `json:"role"`
 }
 
-// userStore maps login usernames to credentials.
-// All passwords are demo/test values — see comments.
-var userStore = map[string]credential{
-	// ── Admin (full access) ─────────────────────────────────────────
-	"admin": {
-		// password: admin123
-		PasswordHash: "$2a$10$40zfif4h6M8TpbnC46Q5zeP8Jx8kbY/eiRjmxMo0f8R5d5pivCoKu",
-		Org:          "province1",
-		User:         "Admin",
-		Name:         "System Admin",
-		Roles:        []string{"admin"},
-	},
+type Store struct{ db *sql.DB }
 
-	// ── Malpot / Official (register land, view all) ────────────────
-	"malpot1": {
-		// password: malpot123
-		PasswordHash: "$2a$10$HahUs//nDvYWOQn.lYK1Ku0ZBHLt1HXEFPK3lsc5r/ikK0BTuCoXe",
-		Org:          "province1",
-		User:         "User1",
-		Name:         "Province Malpot",
-		Roles:        []string{"malpot"},
-	},
-	"official1": {
-		// password: official123
-		PasswordHash: "$2a$10$SUTHC2nTaD.0H.gpKd9qRu10bEeGjeZdQJ9puD7Cj9FMc7cdmEajq",
-		Org:          "province1",
-		User:         "User1",
-		Name:         "Province Official",
-		Roles:        []string{"official"},
-	},
+var globalStore *Store
 
-	// ── Individual land owners (seller role is informal — chaincode checks real ownership) ──
-	"seller1": {
-		// password: seller123
-		PasswordHash: "$2a$10$gzYCRsOXKEo7WkDcdl9RM.3OHYNwAoNq1WUcpO1cD9EGpdIjrWKc.",
-		Org:          "province1",
-		User:         "User1",
-		Name:         "Land Owner (Seller)",
-		Roles:        []string{"buyer"},
-	},
-	"buyer1": {
-		// password: buyer123
-		PasswordHash: "$2a$10$12WFyxmCK3RmtVX4yrZNkexJqCjGATDAYgQw2tEYbcRlLCWL5HS/y",
-		Org:          "province1",
-		User:         "User1",
-		Name:         "Property Buyer",
-		Roles:        []string{"buyer"},
-	},
+// InitDB initializes SQLite and seeds dummy users.
+func InitDB(dbPath string) error {
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("open db: %w", err)
+	}
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("ping db: %w", err)
+	}
+	_, _ = db.Exec("PRAGMA journal_mode=WAL")
 
-	// ── Simple demo users ───────────────────────────────────────────
-	"user1": {
-		// password: land123
-		PasswordHash: "$2a$10$uJJKqNtpJnfR1wwL/5Kmn.or2kzJDrBaDrnyXduxqY27n4MqOZpn2",
-		Org:          "province1",
-		User:         "User1",
-		Name:         "User One",
-		Roles:        []string{"admin", "malpot", "official", "seller", "buyer"},
-	},
-	"user2": {
-		// password: land123
-		PasswordHash: "$2a$10$uJJKqNtpJnfR1wwL/5Kmn.or2kzJDrBaDrnyXduxqY27n4MqOZpn2",
-		Org:          "province1",
-		User:         "User2",
-		Name:         "User Two",
-		Roles:        []string{"seller", "buyer"},
-	},
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS users (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			nid        TEXT UNIQUE NOT NULL,
+			password_hash TEXT NOT NULL,
+			display_name TEXT NOT NULL DEFAULT '',
+			role       TEXT NOT NULL DEFAULT 'customer',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("create users table: %w", err)
+	}
+
+	globalStore = &Store{db: db}
+	return seedDummyData()
 }
 
-// secret is the HMAC key used to sign JWTs.  Override via JWT_SECRET env.
+func seedDummyData() error {
+	type s struct{ nid, pass, name, role string }
+	users := []s{
+		{"admin", "admin123", "System Admin", "admin"},
+		{"NID-001", "pass123", "Alice Sharma", "customer"},
+		{"NID-002", "pass123", "Bob Verma", "customer"},
+		{"NID-003", "pass123", "Carol Singh", "customer"},
+		{"NID-004", "pass123", "Dave Patel", "customer"},
+		{"NID-005", "pass123", "Eve Gupta", "customer"},
+		{"NID-006", "pass123", "Frank Das", "customer"},
+	}
+	for _, u := range users {
+		var c int
+		_ = globalStore.db.QueryRow("SELECT COUNT(*) FROM users WHERE nid = ?", u.nid).Scan(&c)
+		if c > 0 {
+			continue
+		}
+		h, _ := bcrypt.GenerateFromPassword([]byte(u.pass), bcrypt.DefaultCost)
+		_, _ = globalStore.db.Exec(
+			"INSERT INTO users (nid, password_hash, display_name, role) VALUES (?,?,?,?)",
+			u.nid, string(h), u.name, u.role,
+		)
+	}
+	return nil
+}
+
 func jwtSecret() []byte {
 	if s := os.Getenv("JWT_SECRET"); s != "" {
 		return []byte(s)
@@ -127,45 +92,67 @@ func jwtSecret() []byte {
 	return []byte("landreg-dev-secret-change-in-production")
 }
 
-// ── Public API ────────────────────────────────────────────────────────
-
-// Authenticate checks username + password and returns a signed JWT plus user info.
-func Authenticate(username, password string) (token string, info *UserInfo, err error) {
-	cred, ok := userStore[username]
-	if !ok {
+// Authenticate checks NID + password, returns JWT + user info.
+func Authenticate(nid, password string) (token string, info *UserInfo, err error) {
+	if globalStore == nil {
+		return "", nil, fmt.Errorf("auth store not initialized")
+	}
+	var hash, name, role string
+	err = globalStore.db.QueryRow(
+		"SELECT password_hash, display_name, role FROM users WHERE nid = ?", nid,
+	).Scan(&hash, &name, &role)
+	if err != nil {
 		return "", nil, fmt.Errorf("invalid credentials")
 	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(password)); err != nil {
-		// Password mismatch — log a warning in production.
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
 		return "", nil, fmt.Errorf("invalid credentials")
 	}
-
 	claims := Claims{
-		Org:  cred.Org,
-		User: cred.User,
+		NID: nid,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(12 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "landreg-backend",
 		},
 	}
-
 	token, err = jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtSecret())
 	if err != nil {
 		return "", nil, err
 	}
-
-	info = &UserInfo{
-		Username: username,
-		Name:     cred.Name,
-		Org:      cred.Org,
-		Roles:    cred.Roles,
-	}
-	return token, info, nil
+	return token, &UserInfo{NID: nid, Name: name, Role: role}, nil
 }
 
-// Validate parses and validates a JWT, returning the embedded claims.
+// Signup creates a new user with NID as the identity.
+func Signup(nid, password, name, role string) (*UserInfo, error) {
+	if globalStore == nil {
+		return nil, fmt.Errorf("auth store not initialized")
+	}
+	if role == "" {
+		role = "customer"
+	}
+	if role != "admin" && role != "customer" {
+		return nil, fmt.Errorf("invalid role: %s", role)
+	}
+	var c int
+	_ = globalStore.db.QueryRow("SELECT COUNT(*) FROM users WHERE nid = ?", nid).Scan(&c)
+	if c > 0 {
+		return nil, fmt.Errorf("NID already registered")
+	}
+	h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+	_, err = globalStore.db.Exec(
+		"INSERT INTO users (nid, password_hash, display_name, role) VALUES (?,?,?,?)",
+		nid, string(h), name, role,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+	return &UserInfo{NID: nid, Name: name, Role: role}, nil
+}
+
+// Validate parses and validates a JWT.
 func Validate(tokenStr string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{},
 		func(t *jwt.Token) (any, error) {
@@ -178,7 +165,6 @@ func Validate(tokenStr string) (*Claims, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid token: %w", err)
 	}
-
 	claims, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
 		return nil, fmt.Errorf("invalid token claims")
