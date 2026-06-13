@@ -25,6 +25,11 @@ echo "║  Land Registry — Full Rebuild    ║"
 echo "╚══════════════════════════════════╝"
 
 # ── Tear down ────────────────────────────────────────────────────────
+log "Killing processes on ports 8080 & 3000..."
+for port in 8080 3000; do
+    fuser -k ${port}/tcp 2>/dev/null || true
+done
+
 log "Tearing down..."
 cd network
 docker compose --project-directory .. down -v --remove-orphans 2>/dev/null || true
@@ -37,21 +42,21 @@ log "Chaincode deps..."
 cd ../backend/chaincode/go/landreg && go mod tidy 2>/dev/null; cd "$PROJ/network"
 
 log "Generating MSP certs..."
-docker run --rm -v "$(pwd):/work" -w /work hyperledger/fabric-tools:2.5 \
+docker run --rm -v "$(pwd):/work:Z" -w /work hyperledger/fabric-tools:2.5 \
     cryptogen generate --config=/work/crypto-config.yaml --output=/work/organizations
-docker run --rm -v "$(pwd)/organizations:/orgs" alpine chown -R $(id -u):$(id -g) /orgs 2>/dev/null || true
+docker run --rm -v "$(pwd)/organizations:/orgs:Z" alpine sh -c "chown -R $(id -u):$(id -g) /orgs && chmod -R a+rX /orgs" 2>/dev/null || true
 ok "Certs + permissions done"
 
 log "Generating channel artifacts..."
 mkdir -p channel-artifacts
 FABRIC_CFG_PATH="$(pwd)"
-docker run --rm -v "$(pwd):/work" -w /work -e FABRIC_CFG_PATH=/work hyperledger/fabric-tools:2.5 \
+docker run --rm -v "$(pwd):/work:Z" -w /work -e FABRIC_CFG_PATH=/work hyperledger/fabric-tools:2.5 \
     configtxgen -profile OrdererGenesis -channelID system-channel -outputBlock /work/channel-artifacts/genesis.block
-docker run --rm -v "$(pwd):/work" -w /work -e FABRIC_CFG_PATH=/work hyperledger/fabric-tools:2.5 \
+docker run --rm -v "$(pwd):/work:Z" -w /work -e FABRIC_CFG_PATH=/work hyperledger/fabric-tools:2.5 \
     configtxgen -profile LandChannel -outputCreateChannelTx /work/channel-artifacts/channel.tx -channelID mychannel
 # Anchor peer updates per org
 for i in 1 2 3; do
-    docker run --rm -v "$(pwd):/work" -w /work -e FABRIC_CFG_PATH=/work hyperledger/fabric-tools:2.5 \
+    docker run --rm -v "$(pwd):/work:Z" -w /work -e FABRIC_CFG_PATH=/work hyperledger/fabric-tools:2.5 \
         configtxgen -profile LandChannel -outputAnchorPeersUpdate "/work/channel-artifacts/Province${i}MSPanchors.tx" -channelID mychannel -asOrg "Province${i}MSP"
 done
 ok "Artifacts done"

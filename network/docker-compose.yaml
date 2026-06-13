@@ -26,9 +26,9 @@ services:
     working_dir: /root
     command: orderer
     volumes:
-      - ./organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp:/etc/hyperledger/fabric/msp
-      - ./organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls:/etc/hyperledger/fabric/tls
-      - ./channel-artifacts/genesis.block:/etc/hyperledger/fabric/genesis.block
+      - ./organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp:/etc/hyperledger/fabric/msp:z
+      - ./organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls:/etc/hyperledger/fabric/tls:z
+      - ./channel-artifacts/genesis.block:/etc/hyperledger/fabric/genesis.block:z
       - orderer.example.com:/var/hyperledger/production/orderer
     ports: ["7050:7050", "7053:7053"]
     networks: [fabric-net]
@@ -60,8 +60,8 @@ services:
     command: peer node start
     volumes:
       - /var/run/docker.sock:/host/var/run/docker.sock
-      - ./organizations/peerOrganizations/province1.example.com/peers/peer0.province1.example.com/msp:/etc/hyperledger/fabric/msp
-      - ./organizations/peerOrganizations/province1.example.com/peers/peer0.province1.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./organizations/peerOrganizations/province1.example.com/peers/peer0.province1.example.com/msp:/etc/hyperledger/fabric/msp:z
+      - ./organizations/peerOrganizations/province1.example.com/peers/peer0.province1.example.com/tls:/etc/hyperledger/fabric/tls:z
       - peer0.province1.example.com:/var/hyperledger/production
     ports: ["7051:7051", "7052:7052"]
     depends_on: [orderer.example.com]
@@ -94,8 +94,8 @@ services:
     command: peer node start
     volumes:
       - /var/run/docker.sock:/host/var/run/docker.sock
-      - ./organizations/peerOrganizations/province2.example.com/peers/peer0.province2.example.com/msp:/etc/hyperledger/fabric/msp
-      - ./organizations/peerOrganizations/province2.example.com/peers/peer0.province2.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./organizations/peerOrganizations/province2.example.com/peers/peer0.province2.example.com/msp:/etc/hyperledger/fabric/msp:z
+      - ./organizations/peerOrganizations/province2.example.com/peers/peer0.province2.example.com/tls:/etc/hyperledger/fabric/tls:z
       - peer0.province2.example.com:/var/hyperledger/production
     ports: ["8051:8051", "8052:8052"]
     depends_on: [orderer.example.com]
@@ -128,8 +128,8 @@ services:
     command: peer node start
     volumes:
       - /var/run/docker.sock:/host/var/run/docker.sock
-      - ./organizations/peerOrganizations/province3.example.com/peers/peer0.province3.example.com/msp:/etc/hyperledger/fabric/msp
-      - ./organizations/peerOrganizations/province3.example.com/peers/peer0.province3.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./organizations/peerOrganizations/province3.example.com/peers/peer0.province3.example.com/msp:/etc/hyperledger/fabric/msp:z
+      - ./organizations/peerOrganizations/province3.example.com/peers/peer0.province3.example.com/tls:/etc/hyperledger/fabric/tls:z
       - peer0.province3.example.com:/var/hyperledger/production
     ports: ["9051:9051", "9052:9052"]
     depends_on: [orderer.example.com]
@@ -152,9 +152,9 @@ services:
     command: /bin/bash
     volumes:
       - /var/run/docker.sock:/host/var/run/docker.sock
-      - ./organizations:/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations
-      - ./channel-artifacts:/opt/gopath/src/github.com/hyperledger/fabric/peer/channel-artifacts
-      - ../backend/chaincode:/opt/gopath/src/github.com/hyperledger/fabric/peer/chaincode
+      - ./organizations:/opt/gopath/src/github.com/hyperledger/fabric/peer/organizations:z
+      - ./channel-artifacts:/opt/gopath/src/github.com/hyperledger/fabric/peer/channel-artifacts:z
+      - ../backend/chaincode:/opt/gopath/src/github.com/hyperledger/fabric/peer/chaincode:z
     depends_on:
       - peer0.province1.example.com
       - peer0.province2.example.com
@@ -175,7 +175,7 @@ services:
       - PEER_TLS_CA_CERT=/organizations/peerOrganizations/province1.example.com/peers/peer0.province1.example.com/tls/ca.crt
       - PROJECT_ROOT=/
     volumes:
-      - ./organizations:/organizations:ro
+      - ./organizations:/organizations:ro,z
     ports: ["8080:8080"]
     depends_on:
       - peer0.province1.example.com
