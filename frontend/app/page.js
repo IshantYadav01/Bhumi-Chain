@@ -2,155 +2,19 @@
 
 import { useState, useEffect, useCallback } from "react";
 
-// ── Styles ──────────────────────────────────────────────────────────
-const S = {
-  container: { maxWidth: 1200, margin: "0 auto", padding: "24px 16px" },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  title: { fontSize: 26, fontWeight: 700, color: "#7c3aed", margin: 0 },
-  subtitle: { fontSize: 13, color: "#888", marginTop: 4 },
-  status: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 13,
-    background: "#1a1a2e",
-    padding: "6px 14px",
-    borderRadius: 20,
-    border: "1px solid #333",
-  },
-  dot: (c) => ({
-    width: 8,
-    height: 8,
-    borderRadius: "50%",
-    background: c,
-    display: "inline-block",
-  }),
-  btn: {
-    padding: "8px 18px",
-    borderRadius: 8,
-    border: "none",
-    cursor: "pointer",
-    fontSize: 13,
-    fontWeight: 600,
-  },
-  btnPrimary: { background: "#7c3aed", color: "#fff" },
-  btnDanger: {
-    background: "transparent",
-    color: "#ef4444",
-    border: "1px solid #ef4444",
-  },
-  btnWarning: {
-    background: "transparent",
-    color: "#f59e0b",
-    border: "1px solid #f59e0b",
-  },
-  btnOutline: {
-    background: "transparent",
-    color: "#7c3aed",
-    border: "1px solid #7c3aed",
-  },
-  btnSmall: { padding: "4px 10px", fontSize: 12, borderRadius: 6 },
-  card: {
-    background: "#1a1a2e",
-    borderRadius: 12,
-    border: "1px solid #2a2a3e",
-    overflow: "hidden",
-    marginBottom: 20,
-  },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-  th: {
-    textAlign: "left",
-    padding: "10px 14px",
-    borderBottom: "1px solid #2a2a3e",
-    color: "#888",
-    fontWeight: 600,
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  td: { padding: "10px 14px", borderBottom: "1px solid #1f1f35" },
-  formCard: {
-    background: "#1a1a2e",
-    borderRadius: 12,
-    border: "1px solid #2a2a3e",
-    padding: 20,
-    marginBottom: 16,
-  },
-  formTitle: { fontSize: 14, fontWeight: 600, marginBottom: 12, color: "#ccc" },
-  input: {
-    background: "#0f0f1a",
-    border: "1px solid #333",
-    borderRadius: 6,
-    padding: "7px 11px",
-    color: "#e0e0e0",
-    fontSize: 13,
-    width: "100%",
-    boxSizing: "border-box",
-  },
-  select: {
-    background: "#0f0f1a",
-    border: "1px solid #333",
-    borderRadius: 6,
-    padding: "7px 11px",
-    color: "#e0e0e0",
-    fontSize: 13,
-    width: "100%",
-    boxSizing: "border-box",
-  },
-  inputGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-    gap: 8,
-    marginBottom: 10,
-  },
-  badge: (c, bg) => ({
-    display: "inline-block",
-    padding: "2px 8px",
-    borderRadius: 4,
-    fontSize: 11,
-    fontWeight: 600,
-    background: bg,
-    color: c,
-  }),
-  toast: {
-    position: "fixed",
-    bottom: 24,
-    right: 24,
-    padding: "12px 20px",
-    borderRadius: 10,
-    fontSize: 14,
-    fontWeight: 600,
-    zIndex: 999,
-  },
-  tabBar: { display: "flex", gap: 4, marginBottom: 16 },
-  tab: (active) => ({
-    padding: "6px 16px",
-    borderRadius: 8,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-    border: "none",
-    background: active ? "#7c3aed" : "transparent",
-    color: active ? "#fff" : "#888",
-    transition: "all 0.15s",
-  }),
-};
-
 function statusBadge(status) {
   const map = {
-    active: { color: "#22c55e", bg: "#22c55e22" },
-    mortgaged: { color: "#f59e0b", bg: "#f59e0b22" },
-    disputed: { color: "#ef4444", bg: "#ef444422" },
+    active: "text-green-500 bg-green-500/10",
+    mortgaged: "text-amber-500 bg-amber-500/10",
+    disputed: "text-red-500 bg-red-500/10",
   };
-  const s = map[status] || { color: "#888", bg: "#88822" };
-  return <span style={S.badge(s.color, s.bg)}>{status}</span>;
+  const classes = map[status] || "text-gray-400 bg-gray-400/10";
+  
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${classes}`}>
+      {status}
+    </span>
+  );
 }
 
 // ── Main Page ───────────────────────────────────────────────────────
@@ -271,59 +135,45 @@ export default function Home() {
 
   const filtered = lands;
 
+  // Reusable utility styles translated to Tailwind CSS strings
+  const inputClass = "bg-[#0f0f1a] border border-[#333] rounded px-[11px] py-[7px] text-[#e0e0e0] text-ed-13 w-full box-border focus:outline-none focus:border-[#7c3aed]";
+  const btnClass = "px-[18px] py-2 rounded-lg text-xs font-semibold cursor-pointer border transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed";
+  const btnSmallClass = "px-2.5 py-1 text-xs rounded-md";
+  const formCardClass = "bg-[#1a1a2e] rounded-xl border border-[#2a2a3e] p-5 mb-4";
+  const inputGridClass = "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2 mb-2.5";
+
   return (
-    <div style={S.container}>
+    <div className="max-w-[1200px] my-0 mx-auto px-4 py-6">
       {/* Header */}
-      <div style={S.header}>
+      <div className="flex justify-between items-center mb-5 flex-wrap gap-3">
         <div>
-          <h1 style={S.title}>Land Registry Explorer</h1>
-          <p style={S.subtitle}>
-            Private Blockchain — 5 Department Full Nodes | Buyers, Sellers,
-            Officials as Lite Nodes
+          <h1 className="text-[26px] font-bold text-[#7c3aed] m-0">Land Registry Explorer</h1>
+          <p className="text-xs text-[#888] mt-1">
+            Private Blockchain — 5 Department Full Nodes | Buyers, Sellers, Officials as Lite Nodes
           </p>
         </div>
-        <div style={S.status}>
-          <span
-            style={S.dot(networkStatus === "connected" ? "#22c55e" : "#ef4444")}
-          />
+        <div className="flex items-center gap-2 text-xs bg-[#1a1a2e] px-3.5 py-1.5 rounded-[20px] border border-[#333]">
+          <span className={`w-2 h-2 rounded-full inline-block ${networkStatus === "connected" ? "bg-[#22c55e]" : "bg-[#ef4444]"}`} />
           {networkStatus === "connected" ? "Connected" : "Disconnected"}
-          <span style={{ color: "#555", marginLeft: 8 }}>
-            {lands.length} plots
-          </span>
+          <span className="text-[#555] ml-2">{lands.length} plots</span>
         </div>
       </div>
 
       {error && (
-        <div
-          style={{
-            background: "#3b1111",
-            border: "1px solid #ef4444",
-            borderRadius: 8,
-            padding: "10px 16px",
-            marginBottom: 16,
-            fontSize: 13,
-            color: "#fca5a5",
-          }}
-        >
+        <div className="bg-[#3b1111] border border-[#ef4444] rounded-lg px-4 py-2.5 mb-4 text-xs text-[#fca5a5]">
           {error}
         </div>
       )}
 
       {/* Filter Bar */}
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          marginBottom: 16,
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
-        <div style={S.tabBar}>
+      <div className="flex gap-3 mb-4 flex-wrap items-center">
+        <div className="flex gap-1 mb-4">
           {["all", "active", "mortgaged", "disputed"].map((t) => (
             <button
               key={t}
-              style={S.tab(tab === t)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border-none transition-all duration-150 hover:opacity-85 ${
+                tab === t ? "bg-[#7c3aed] text-white" : "bg-transparent text-[#888]"
+              }`}
               onClick={() => {
                 setTab(t);
                 setFilterOwner("");
@@ -334,7 +184,7 @@ export default function Home() {
           ))}
         </div>
         <input
-          style={{ ...S.input, width: 200 }}
+          className={`${inputClass} w-[200px]`}
           placeholder="Filter by owner..."
           value={filterOwner}
           onChange={(e) => {
@@ -345,37 +195,31 @@ export default function Home() {
       </div>
 
       {/* Land Table */}
-      <div style={S.card}>
-        <table style={S.table}>
+      <div className="bg-[#1a1a2e] rounded-xl border border-[#2a2a3e] overflow-hidden mb-5">
+        <table className="w-full border-collapse text-xs">
           <thead>
             <tr>
-              <th style={S.th}>Plot ID</th>
-              <th style={S.th}>Survey #</th>
-              <th style={S.th}>Owner</th>
-              <th style={S.th}>Location</th>
-              <th style={S.th}>Area (m²)</th>
-              <th style={S.th}>Type</th>
-              <th style={S.th}>Status</th>
-              <th style={S.th}>Mortgage / Dispute</th>
-              <th style={S.th}></th>
+              <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e] text-[#888] font-semibold text-[11px] uppercase tracking-wider">Plot ID</th>
+              <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e] text-[#888] font-semibold text-[11px] uppercase tracking-wider">Survey #</th>
+              <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e] text-[#888] font-semibold text-[11px] uppercase tracking-wider">Owner</th>
+              <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e] text-[#888] font-semibold text-[11px] uppercase tracking-wider">Location</th>
+              <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e] text-[#888] font-semibold text-[11px] uppercase tracking-wider">Area (m²)</th>
+              <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e] text-[#888] font-semibold text-[11px] uppercase tracking-wider">Type</th>
+              <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e] text-[#888] font-semibold text-[11px] uppercase tracking-wider">Status</th>
+              <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e] text-[#888] font-semibold text-[11px] uppercase tracking-wider">Mortgage / Dispute</th>
+              <th className="text-left px-3.5 py-2.5 border-b border-[#2a2a3e] text-[#888] font-semibold text-[11px] uppercase tracking-wider"></th>
             </tr>
           </thead>
           <tbody>
             {loading && filtered.length === 0 ? (
               <tr>
-                <td
-                  colSpan={9}
-                  style={{ textAlign: "center", padding: 40, color: "#666" }}
-                >
+                <td colSpan={9} className="text-center py-10 text-[#666]">
                   Loading...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td
-                  colSpan={9}
-                  style={{ textAlign: "center", padding: 40, color: "#666" }}
-                >
+                <td colSpan={9} className="text-center py-10 text-[#666]">
                   No land records. Register one below.
                 </td>
               </tr>
@@ -383,38 +227,36 @@ export default function Home() {
               filtered.map((l) => (
                 <tr
                   key={l.plotId}
-                  style={{
-                    cursor: "pointer",
-                    background:
-                      selected?.plotId === l.plotId ? "#252540" : "transparent",
-                  }}
+                  className={`cursor-pointer transition-colors border-b border-[#1f1f35] hover:bg-[#1f1f35] ${
+                    selected?.plotId === l.plotId ? "bg-[#252540]" : "bg-transparent"
+                  }`}
                   onClick={() => selectLand(l)}
                 >
-                  <td style={S.td}>
-                    <code style={{ color: "#a78bfa" }}>{l.plotId}</code>
+                  <td className="px-3.5 py-2.5">
+                    <code className="text-[#a78bfa]">{l.plotId}</code>
                   </td>
-                  <td style={S.td}>{l.surveyNumber}</td>
-                  <td style={S.td}>{l.owner}</td>
-                  <td style={S.td}>{l.location}</td>
-                  <td style={S.td}>{l.area}</td>
-                  <td style={S.td}>{l.landType}</td>
-                  <td style={S.td}>{statusBadge(l.status)}</td>
-                  <td style={S.td}>
+                  <td className="px-3.5 py-2.5">{l.surveyNumber}</td>
+                  <td className="px-3.5 py-2.5">{l.owner}</td>
+                  <td className="px-3.5 py-2.5">{l.location}</td>
+                  <td className="px-3.5 py-2.5">{l.area}</td>
+                  <td className="px-3.5 py-2.5">{l.landType}</td>
+                  <td className="px-3.5 py-2.5">{statusBadge(l.status)}</td>
+                  <td className="px-3.5 py-2.5 space-x-1">
                     {l.mortgage && (
-                      <span style={S.badge("#f59e0b", "#f59e0b22")}>
+                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold text-amber-500 bg-amber-500/10">
                         🏦 {l.mortgage.bank} (Rs.{l.mortgage.amount})
                       </span>
                     )}
                     {l.dispute && (
-                      <span style={S.badge("#ef4444", "#ef444422")}>
+                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold text-red-500 bg-red-500/10">
                         ⚖️ {l.dispute.caseNumber} — {l.dispute.court}
                       </span>
                     )}
                   </td>
-                  <td style={S.td}>
+                  <td className="px-3.5 py-2.5">
                     {l.status === "active" && (
                       <button
-                        style={{ ...S.btn, ...S.btnDanger, ...S.btnSmall }}
+                        className={`${btnClass} ${btnSmallClass} bg-transparent text-red-500 border-red-500`}
                         onClick={(e) => {
                           e.stopPropagation();
                           doAction("dispute", {
@@ -430,7 +272,7 @@ export default function Home() {
                     )}
                     {l.status === "disputed" && (
                       <button
-                        style={{ ...S.btn, ...S.btnOutline, ...S.btnSmall }}
+                        className={`${btnClass} ${btnSmallClass} bg-transparent text-[#7c3aed] border-[#7c3aed]`}
                         onClick={(e) => {
                           e.stopPropagation();
                           doAction("resolve-dispute", { plotId: l.plotId });
@@ -448,46 +290,44 @@ export default function Home() {
       </div>
 
       {/* Action Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Register Land */}
-        <div style={S.formCard}>
-          <div style={S.formTitle}>Register New Land</div>
-          <div style={S.inputGrid}>
+        <div className={formCardClass}>
+          <div className="text-sm font-semibold mb-3 text-[#ccc]">Register New Land</div>
+          <div className={inputGridClass}>
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Plot ID *"
               value={form.plotId}
               onChange={(e) => setForm({ ...form, plotId: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Survey Number"
               value={form.surveyNumber}
-              onChange={(e) =>
-                setForm({ ...form, surveyNumber: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, surveyNumber: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Owner *"
               value={form.owner}
               onChange={(e) => setForm({ ...form, owner: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Location"
               value={form.location}
               onChange={(e) => setForm({ ...form, location: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Area (m²)"
               type="number"
               value={form.area}
               onChange={(e) => setForm({ ...form, area: e.target.value })}
             />
             <select
-              style={S.select}
+              className={inputClass}
               value={form.landType}
               onChange={(e) => setForm({ ...form, landType: e.target.value })}
             >
@@ -498,7 +338,7 @@ export default function Home() {
             </select>
           </div>
           <button
-            style={{ ...S.btn, ...S.btnPrimary }}
+            className={`${btnClass} bg-[#7c3aed] text-white border-transparent`}
             disabled={!form.plotId || !form.owner}
             onClick={() =>
               doAction("register", {
@@ -516,26 +356,26 @@ export default function Home() {
         </div>
 
         {/* Transfer Land */}
-        <div style={S.formCard}>
-          <div style={S.formTitle}>Transfer Land (Sale)</div>
-          <p style={{ fontSize: 12, color: "#777", marginBottom: 10 }}>
+        <div className={formCardClass}>
+          <div className="text-sm font-semibold mb-3 text-[#ccc]">Transfer Land (Sale)</div>
+          <p className="text-xs text-[#777] mb-2.5">
             Endorsed by Municipality · Malpot · Survey
           </p>
-          <div style={S.inputGrid}>
+          <div className={inputGridClass}>
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Plot ID *"
               value={form.plotId}
               onChange={(e) => setForm({ ...form, plotId: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Buyer *"
               value={form.buyer}
               onChange={(e) => setForm({ ...form, buyer: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Price (Rs.)"
               type="number"
               value={form.price}
@@ -543,7 +383,7 @@ export default function Home() {
             />
           </div>
           <button
-            style={{ ...S.btn, ...S.btnOutline }}
+            className={`${btnClass} bg-transparent text-[#7c3aed] border-[#7c3aed]`}
             disabled={!form.plotId || !form.buyer}
             onClick={() =>
               doAction("transfer", {
@@ -558,44 +398,44 @@ export default function Home() {
         </div>
 
         {/* Mortgage */}
-        <div style={S.formCard}>
-          <div style={S.formTitle}>Set Mortgage</div>
-          <div style={S.inputGrid}>
+        <div className={formCardClass}>
+          <div className="text-sm font-semibold mb-3 text-[#ccc]">Set Mortgage</div>
+          <div className={inputGridClass}>
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Plot ID *"
               value={form.plotId}
               onChange={(e) => setForm({ ...form, plotId: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Bank *"
               value={form.bank}
               onChange={(e) => setForm({ ...form, bank: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Amount (Rs.)"
               type="number"
               value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Start Date"
               value={form.startDate}
               onChange={(e) => setForm({ ...form, startDate: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="End Date"
               value={form.endDate}
               onChange={(e) => setForm({ ...form, endDate: e.target.value })}
             />
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="flex gap-2">
             <button
-              style={{ ...S.btn, ...S.btnWarning }}
+              className={`${btnClass} bg-transparent text-amber-500 border-amber-500`}
               disabled={!form.plotId || !form.bank}
               onClick={() =>
                 doAction("mortgage", {
@@ -610,7 +450,7 @@ export default function Home() {
               Set Mortgage
             </button>
             <button
-              style={{ ...S.btn, ...S.btnOutline, ...S.btnSmall }}
+              className={`${btnClass} ${btnSmallClass} bg-transparent text-[#7c3aed] border-[#7c3aed]`}
               disabled={!form.plotId}
               onClick={() =>
                 doAction("clear-mortgage", { plotId: form.plotId }).then(
@@ -624,39 +464,37 @@ export default function Home() {
         </div>
 
         {/* Dispute */}
-        <div style={S.formCard}>
-          <div style={S.formTitle}>File Legal Dispute</div>
-          <div style={S.inputGrid}>
+        <div className={formCardClass}>
+          <div className="text-sm font-semibold mb-3 text-[#ccc]">File Legal Dispute</div>
+          <div className={inputGridClass}>
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Plot ID *"
               value={form.plotId}
               onChange={(e) => setForm({ ...form, plotId: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Case Number *"
               value={form.caseNumber}
               onChange={(e) => setForm({ ...form, caseNumber: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Court"
               value={form.court}
               onChange={(e) => setForm({ ...form, court: e.target.value })}
             />
             <input
-              style={S.input}
+              className={inputClass}
               placeholder="Description"
               value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="flex gap-2">
             <button
-              style={{ ...S.btn, ...S.btnDanger }}
+              className={`${btnClass} bg-transparent text-red-500 border-red-500`}
               disabled={!form.plotId || !form.caseNumber}
               onClick={() =>
                 doAction("dispute", {
@@ -670,7 +508,7 @@ export default function Home() {
               File Dispute
             </button>
             <button
-              style={{ ...S.btn, ...S.btnOutline, ...S.btnSmall }}
+              className={`${btnClass} ${btnSmallClass} bg-transparent text-[#7c3aed] border-[#7c3aed]`}
               disabled={!form.plotId}
               onClick={() =>
                 doAction("resolve-dispute", { plotId: form.plotId }).then(
@@ -686,130 +524,69 @@ export default function Home() {
 
       {/* Selected Land Detail */}
       {selected && (
-        <div style={{ ...S.formCard, marginTop: 16 }}>
-          <div style={S.formTitle}>
+        <div className={`${formCardClass} mt-4`}>
+          <div className="text-sm font-semibold mb-3 text-[#ccc]">
             Details: {selected.plotId} {statusBadge(selected.status)}
           </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 8,
-              fontSize: 13,
-            }}
-          >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
             <div>
-              <span style={{ color: "#888" }}>Survey #:</span>{" "}
-              {selected.surveyNumber}
+              <span className="text-[#888]">Survey #:</span> {selected.surveyNumber}
             </div>
             <div>
-              <span style={{ color: "#888" }}>Owner:</span> {selected.owner}
+              <span className="text-[#888]">Owner:</span> {selected.owner}
             </div>
             <div>
-              <span style={{ color: "#888" }}>Previous:</span>{" "}
-              {selected.previousOwner || "—"}
+              <span className="text-[#888]">Previous:</span> {selected.previousOwner || "—"}
             </div>
             <div>
-              <span style={{ color: "#888" }}>Location:</span>{" "}
-              {selected.location}
+              <span className="text-[#888]">Location:</span> {selected.location}
             </div>
             <div>
-              <span style={{ color: "#888" }}>Area:</span> {selected.area} m²
+              <span className="text-[#888]">Area:</span> {selected.area} m²
             </div>
             <div>
-              <span style={{ color: "#888" }}>Type:</span> {selected.landType}
+              <span className="text-[#888]">Type:</span> {selected.landType}
             </div>
             <div>
-              <span style={{ color: "#888" }}>Transfers:</span>{" "}
-              {selected.transferCount}
+              <span className="text-[#888]">Transfers:</span> {selected.transferCount}
             </div>
             <div>
-              <span style={{ color: "#888" }}>Registered:</span>{" "}
-              {selected.registeredDate?.slice(0, 10)}
+              <span className="text-[#888]">Registered:</span> {selected.registeredDate?.slice(0, 10)}
             </div>
             {selected.lastTransfer && (
               <div>
-                <span style={{ color: "#888" }}>Last Sale:</span>{" "}
-                {selected.lastTransfer.from} → {selected.lastTransfer.to} (Rs.
+                <span className="text-[#888]">Last Sale:</span> {selected.lastTransfer.from} → {selected.lastTransfer.to} (Rs.
                 {selected.lastTransfer.price})
               </div>
             )}
           </div>
           {selected.mortgage && (
-            <div
-              style={{
-                marginTop: 10,
-                padding: "8px 12px",
-                background: "#2a2a0a",
-                borderRadius: 8,
-                fontSize: 13,
-              }}
-            >
+            <div className="mt-2.5 px-3 py-2 bg-[#2a2a0a] rounded-lg text-xs">
               🏦 <strong>Mortgage:</strong> {selected.mortgage.bank} — Rs.
-              {selected.mortgage.amount} ({selected.mortgage.startDate} to{" "}
-              {selected.mortgage.endDate})
+              {selected.mortgage.amount} ({selected.mortgage.startDate} to {selected.mortgage.endDate})
             </div>
           )}
           {selected.dispute && (
-            <div
-              style={{
-                marginTop: 10,
-                padding: "8px 12px",
-                background: "#2a0a0a",
-                borderRadius: 8,
-                fontSize: 13,
-              }}
-            >
-              ⚖️ <strong>Dispute:</strong> Case #{selected.dispute.caseNumber} —{" "}
-              {selected.dispute.court} ({selected.dispute.status})<br />
-              <span style={{ color: "#888" }}>
-                {selected.dispute.description}
-              </span>
+            <div className="mt-2.5 px-3 py-2 bg-[#2a0a0a] rounded-lg text-xs">
+              ⚖️ <strong>Dispute:</strong> Case #{selected.dispute.caseNumber} — {selected.dispute.court} ({selected.dispute.status})<br />
+              <span className="text-[#888]">{selected.dispute.description}</span>
             </div>
           )}
         </div>
       )}
 
+      {/* Toast Alert */}
       {toast && (
         <div
-          style={{
-            ...S.toast,
-            background: toast.ok ? "#1a3a1a" : "#3a1a1a",
-            border: `1px solid ${toast.ok ? "#22c55e" : "#ef4444"}`,
-            color: toast.ok ? "#86efac" : "#fca5a5",
-          }}
+          className={`fixed bottom-6 right-6 px-5 py-3 rounded-text-sm font-semibold z-[999] animate-[slideUp_0.15s_ease-out] border ${
+            toast.ok 
+              ? "bg-[#1a3a1a] border-[#22c55e] text-[#86efac]" 
+              : "bg-[#3a1a1a] border-[#ef4444] text-[#fca5a5]"
+          }`}
         >
           {toast.msg}
         </div>
       )}
-
-      <style jsx global>{`
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(12px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        input:focus,
-        select:focus {
-          outline: none;
-          border-color: #7c3aed !important;
-        }
-        button:hover {
-          opacity: 0.85;
-        }
-        button:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-        }
-        tr:hover {
-          background: #1f1f35 !important;
-        }
-      `}</style>
     </div>
   );
 }
