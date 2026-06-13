@@ -63,8 +63,8 @@ func InitDB(dbPath string) error {
 func seedDummyData() error {
 	type s struct{ nid, pass, name, role string }
 	users := []s{
-		{"superadmin", "super123", "Super Admin", "superadmin"},
-		{"admin", "admin123", "System Admin", "admin"},
+		{"superadmin", "super123", "Aakrist", "superadmin"},
+		{"admin", "admin123", "Sushant", "admin"},
 		{"NID-001", "pass123", "Alice Sharma", "customer"},
 		{"NID-002", "pass123", "Bob Verma", "customer"},
 		{"NID-003", "pass123", "Carol Singh", "customer"},

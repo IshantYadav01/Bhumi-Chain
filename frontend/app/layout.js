@@ -8,7 +8,7 @@ const poppins = Poppins({
 });
 
 export const metadata = {
-  title: "Land Registry — Private Blockchain",
+  title: "Bhumi Chain- Land Registry System",
 };
 
 export default function RootLayout({ children }) {
