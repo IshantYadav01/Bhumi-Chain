@@ -139,6 +139,7 @@ Body: `{"action": "<action>", ...fields}`
 | `list-for-sale` | `landId`, `price` | `ListForSale` |
 | `cancel-listing` | `landId` | `CancelListing` |
 | `make-offer` | `landId`, `offeredPrice` | `MakeOffer` |
+| `update-offer` | `landId`, `offeredPrice` | `UpdateOffer` |
 | `accept-offer` | `offerId` | `AcceptOffer` |
 | `confirm-transaction` | `txId` | `ConfirmTransaction` |
 | `reject-transaction` | `txId` | `RejectTransaction` |

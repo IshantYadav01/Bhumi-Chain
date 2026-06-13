@@ -224,7 +224,7 @@ export default function Home() {
       if (refresh.includes("o")) fo();
       if (refresh.includes("t")) {
         ft();
-        fpt();
+        if (admin) fpt();
       }
     }
     return r;
@@ -503,7 +503,12 @@ export default function Home() {
                     <tbody>
                       {listings.map((l) => {
                         const isOwner = l.seller === u?.nid;
-                        const myPrice = offerPrices[l.landId] || "";
+                        const myOffer = offers.find(
+                          (o) =>
+                            o.landId === l.landId &&
+                            o.buyer === u?.nid &&
+                            o.status === "pending",
+                        );
                         return (
                           <tr key={l.id}>
                             <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
@@ -519,13 +524,52 @@ export default function Home() {
                               <Badge status={l.status} />
                             </td>
                             <td className="px-3.5 py-2.5 border-b border-[#1f1f35]">
-                              {!isOwner && l.status === "active" && (
+                              {!isOwner &&
+                                l.status === "active" &&
+                                !myOffer && (
+                                  <div className="flex gap-1 items-center">
+                                    <input
+                                      className={`${inp} w-20`}
+                                      placeholder="Price"
+                                      type="number"
+                                      value={offerPrices[l.landId] || ""}
+                                      onChange={(e) =>
+                                        setOfferPrices({
+                                          ...offerPrices,
+                                          [l.landId]: e.target.value,
+                                        })
+                                      }
+                                    />
+                                    <button
+                                      className={`${btn} ${btnSuc} ${btnSm}`}
+                                      onClick={() =>
+                                        act(
+                                          "make-offer",
+                                          {
+                                            landId: l.landId,
+                                            offeredPrice:
+                                              parseFloat(
+                                                offerPrices[l.landId],
+                                              ) || l.price,
+                                          },
+                                          "o",
+                                        )
+                                      }
+                                    >
+                                      Bid
+                                    </button>
+                                  </div>
+                                )}
+                              {!isOwner && myOffer && (
                                 <div className="flex gap-1 items-center">
                                   <input
                                     className={`${inp} w-20`}
-                                    placeholder="Price"
+                                    placeholder="New price"
                                     type="number"
-                                    value={myPrice}
+                                    value={
+                                      offerPrices[l.landId] ??
+                                      myOffer.offeredPrice
+                                    }
                                     onChange={(e) =>
                                       setOfferPrices({
                                         ...offerPrices,
@@ -534,21 +578,25 @@ export default function Home() {
                                     }
                                   />
                                   <button
-                                    className={`${btn} ${btnSuc} ${btnSm}`}
+                                    className={`${btn} ${btnWrn} ${btnSm}`}
                                     onClick={() =>
                                       act(
-                                        "make-offer",
+                                        "update-offer",
                                         {
                                           landId: l.landId,
                                           offeredPrice:
-                                            parseFloat(myPrice) || l.price,
+                                            parseFloat(offerPrices[l.landId]) ||
+                                            myOffer.offeredPrice,
                                         },
                                         "o",
                                       )
                                     }
                                   >
-                                    Bid
+                                    Edit Bid
                                   </button>
+                                  <span className="text-[10px] text-[#666]">
+                                    Current: Rs.{myOffer.offeredPrice}
+                                  </span>
                                 </div>
                               )}
                               {isOwner && l.status === "active" && (

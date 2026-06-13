@@ -236,3 +236,69 @@ func TestMakeOffer_MultipleBuyers(t *testing.T) {
 	}
 	t.Logf("PASS: 2 pending offers verified for multi-test")
 }
+
+func TestUpdateOffer(t *testing.T) {
+	stub := newStubState()
+	ctx := &testCtx{stub: stub, clientID: &fakeClientIdentity{}}
+
+	putJSON(stub, "multi-upd", &LandRecord{
+		ID: "multi-upd", Owner: "NID-001", Location: "Test", Area: 500,
+		Status: "listed", Price: 100000, RegisteredAt: "2024-01-01T00:00:00Z",
+	})
+	putJSON(stub, ListingKeyPrefix+"multi-upd", &SaleListing{
+		ID: ListingKeyPrefix + "multi-upd", LandID: "multi-upd",
+		Seller: "NID-001", Price: 100000, Status: "active", CreatedAt: "2024-01-01T00:00:00Z",
+	})
+
+	sc := &SmartContract{}
+
+	// Place initial offer
+	offerID, err := sc.MakeOffer(ctx, "NID-002", "multi-upd", 95000)
+	if err != nil {
+		t.Fatalf("FAIL: initial MakeOffer: %v", err)
+	}
+	t.Logf("PASS: initial offer: %s", offerID)
+
+	// Update the offer price
+	updatedID, err := sc.UpdateOffer(ctx, "NID-002", "multi-upd", 92000)
+	if err != nil {
+		t.Fatalf("FAIL: UpdateOffer: %v", err)
+	}
+	t.Logf("PASS: updated offer: %s", updatedID)
+
+	// Verify the price was updated
+	offer, err := sc.getOfferByID(ctx, updatedID)
+	if err != nil {
+		t.Fatalf("FAIL: getOfferByID: %v", err)
+	}
+	if offer.OfferedPrice != 92000 {
+		t.Errorf("FAIL: expected price 92000, got %.0f", offer.OfferedPrice)
+	}
+	if offer.Status != "pending" {
+		t.Errorf("FAIL: expected pending, got %s", offer.Status)
+	}
+	t.Logf("PASS: price updated to %.0f, status still pending", offer.OfferedPrice)
+
+	// Try updating with negative price — should fail
+	_, err = sc.UpdateOffer(ctx, "NID-002", "multi-upd", -1)
+	if err == nil {
+		t.Fatal("FAIL: negative price should be rejected")
+	}
+	t.Logf("PASS: negative price rejected: %v", err)
+
+	// Try updating someone else's offer — should fail
+	_, err = sc.UpdateOffer(ctx, "NID-003", "multi-upd", 50000)
+	if err == nil {
+		t.Fatal("FAIL: should not update non-existent offer")
+	}
+	t.Logf("PASS: non-existent offer rejected: %v", err)
+
+	// After accepting the offer, update should fail
+	offer.Status = "accepted"
+	_ = sc.putOffer(ctx, offer)
+	_, err = sc.UpdateOffer(ctx, "NID-002", "multi-upd", 100000)
+	if err == nil {
+		t.Fatal("FAIL: should not update accepted offer")
+	}
+	t.Logf("PASS: accepted offer cannot be updated: %v", err)
+}

@@ -242,6 +242,40 @@ func (s *SmartContract) MakeOffer(
 	return offer.ID, nil
 }
 
+// UpdateOffer lets a buyer change their pending offer price on a listed land.
+func (s *SmartContract) UpdateOffer(
+	ctx contractapi.TransactionContextInterface,
+	caller, landID string, newPrice float64,
+) (string, error) {
+	if caller == "" {
+		return "", fmt.Errorf("caller identity required")
+	}
+	if newPrice <= 0 {
+		return "", fmt.Errorf("price must be positive")
+	}
+	record, err := s.getLand(ctx, landID)
+	if err != nil {
+		return "", err
+	}
+	if record.Status != "listed" {
+		return "", fmt.Errorf("land %s is no longer listed", landID)
+	}
+	offerID := OfferKeyPrefix + landID + "_" + caller
+	offer, err := s.getOfferByID(ctx, offerID)
+	if err != nil {
+		return "", fmt.Errorf("you have no offer on this land")
+	}
+	if offer.Status != "pending" {
+		return "", fmt.Errorf("your offer is %s, cannot edit", offer.Status)
+	}
+	offer.OfferedPrice = newPrice
+	offer.CreatedAt = now()
+	if err := s.putOffer(ctx, offer); err != nil {
+		return "", err
+	}
+	return offer.ID, nil
+}
+
 func (s *SmartContract) AcceptOffer(
 	ctx contractapi.TransactionContextInterface, caller, offerID string,
 ) error {

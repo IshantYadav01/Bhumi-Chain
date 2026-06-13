@@ -120,6 +120,8 @@ func (h *LandHandler) PostAction(c *gin.Context) {
 		h.handleCancelListing(cli, callerID, c, &req)
 	case "make-offer":
 		h.handleMakeOffer(cli, callerID, c, &req)
+	case "update-offer":
+		h.handleUpdateOffer(cli, callerID, c, &req)
 	case "accept-offer":
 		h.handleAcceptOffer(cli, callerID, c, &req)
 	case "confirm-transaction":
@@ -210,6 +212,20 @@ func (h *LandHandler) handleMakeOffer(cli *fabric.Client, cid string, c *gin.Con
 		return
 	}
 	raw, err := h.submitFresh(c, "MakeOffer", cid, req.LandID,
+		strconv.FormatFloat(req.OfferedPrice, 'f', -1, 64))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: strings.Trim(string(raw), "\"")})
+}
+
+func (h *LandHandler) handleUpdateOffer(cli *fabric.Client, cid string, c *gin.Context, req *models.ActionRequest) {
+	if req.LandID == "" || req.OfferedPrice <= 0 {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Error: "landId + offeredPrice required"})
+		return
+	}
+	raw, err := h.submitFresh(c, "UpdateOffer", cid, req.LandID,
 		strconv.FormatFloat(req.OfferedPrice, 'f', -1, 64))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Error: err.Error()})
