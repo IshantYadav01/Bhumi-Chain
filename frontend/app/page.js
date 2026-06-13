@@ -19,7 +19,8 @@ function Badge({ status }) {
     pending: "bg-[#DDF4FF] text-[#0969DA] border border-[#54AEFF]",
     completed: "bg-[#DAFBE1] text-[#1A7F37] border border-[#4AC26B]",
     cancelled: "bg-[#FFEBEB] text-[#CF222E] border border-[#FFC1C1]",
-    pending_buyer_confirm: "bg-[#FEF5D1] text-[#9A6700] border border-[#D4A72C]",
+    pending_buyer_confirm:
+      "bg-[#FEF5D1] text-[#9A6700] border border-[#D4A72C]",
     pending_admin: "bg-[#F2EAFF] text-[#653CAD] border border-[#A881F4]",
     rejected: "bg-[#FFEBEB] text-[#CF222E] border border-[#FFC1C1]",
   };
@@ -49,23 +50,33 @@ function cn(name) {
 //   Text/2:    #8B949E  (secondary / labels)
 //   Text/3:    #484F58  (meta / timestamps)
 //   Mono:      system monospace (blockchain data only)
-const btn = "px-4 py-1.5 rounded text-sm font-medium border-none cursor-pointer transition-colors duration-100 disabled:opacity-40 disabled:cursor-not-allowed";
+const btn =
+  "px-4 py-1.5 rounded text-sm font-medium border-none cursor-pointer transition-colors duration-100 disabled:opacity-40 disabled:cursor-not-allowed";
 const btnPri = "bg-[#3B5BDB] text-white hover:bg-[#2F4AC4]";
-const btnSuc = "bg-[#DAFBE1] text-[#1A7F37] border border-[#4AC26B] hover:bg-[#CFEAD4]";
-const btnDng = "bg-[#FFEBEB] text-[#CF222E] border border-[#FFC1C1] hover:bg-[#FADBD8]";
-const btnWrn = "bg-[#FEF5D1] text-[#9A6700] border border-[#D4A72C] hover:bg-[#F3E5AB]";
-const btnOut = "bg-transparent text-[#3B5BDB] border border-[#3B5BDB] hover:bg-[#3B5BDB0A]";
+const btnSuc =
+  "bg-[#DAFBE1] text-[#1A7F37] border border-[#4AC26B] hover:bg-[#CFEAD4]";
+const btnDng =
+  "bg-[#FFEBEB] text-[#CF222E] border border-[#FFC1C1] hover:bg-[#FADBD8]";
+const btnWrn =
+  "bg-[#FEF5D1] text-[#9A6700] border border-[#D4A72C] hover:bg-[#F3E5AB]";
+const btnOut =
+  "bg-transparent text-[#3B5BDB] border border-[#3B5BDB] hover:bg-[#3B5BDB0A]";
 const btnSm = "px-2.5 py-1 text-[11px] rounded";
 
-const card = "bg-[#FFFFFF] rounded-lg border border-[#D0D7DE] overflow-hidden mb-5";
+const card =
+  "bg-[#FFFFFF] rounded-lg border border-[#D0D7DE] overflow-hidden mb-5";
 const fc = "bg-[#FFFFFF] rounded-lg border border-[#D0D7DE] p-5 mb-4";
-const inp = "w-full bg-[#F6F8FA] border border-[#D0D7DE] rounded px-3 py-1.5 text-[13px] text-[#24292F] placeholder-[#8C95A0] focus:outline-none focus:border-[#3B5BDB] focus:bg-[#FFFFFF] transition-colors";
-const sel = "w-full bg-[#F6F8FA] border border-[#D0D7DE] rounded px-3 py-1.5 text-[13px] text-[#24292F] focus:outline-none focus:border-[#3B5BDB] focus:bg-[#FFFFFF] transition-colors";
+const inp =
+  "w-full bg-[#F6F8FA] border border-[#D0D7DE] rounded px-3 py-1.5 text-[13px] text-[#24292F] placeholder-[#8C95A0] focus:outline-none focus:border-[#3B5BDB] focus:bg-[#FFFFFF] transition-colors";
+const sel =
+  "w-full bg-[#F6F8FA] border border-[#D0D7DE] rounded px-3 py-1.5 text-[13px] text-[#24292F] focus:outline-none focus:border-[#3B5BDB] focus:bg-[#FFFFFF] transition-colors";
 
 // Table primitives
-const th = "text-left px-4 py-2.5 border-b border-[#D0D7DE] text-[11px] font-semibold text-[#57606A] uppercase tracking-wider whitespace-nowrap";
+const th =
+  "text-left px-4 py-2.5 border-b border-[#D0D7DE] text-[11px] font-semibold text-[#57606A] uppercase tracking-wider whitespace-nowrap";
 const td = "px-4 py-2.5 border-b border-[#F0F2F5] text-[13px] text-[#24292F]";
-const tdMono = "px-4 py-2.5 border-b border-[#F0F2F5] text-[13px] font-mono text-[#24292F]";
+const tdMono =
+  "px-4 py-2.5 border-b border-[#F0F2F5] text-[13px] font-mono text-[#24292F]";
 
 export default function Home() {
   const router = useRouter();
@@ -254,12 +265,12 @@ export default function Home() {
   };
 
   return (
-    <div className={`${poppins.variable} font-[family-name:var(--font-poppins)] min-h-screen bg-[#E6EDF3]`}>
-
+    <div
+      className={`${poppins.variable} font-[family-name:var(--font-poppins)] min-h-screen bg-[#E6EDF3]`}
+    >
       {/* ── Top bar ─────────────────────────────────────────────────── */}
       <header className="bg-[#FFFFFF] border-b border-[#D0D7DE] sticky top-0 z-30">
         <div className="max-w-[1280px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
-
           {/* Brand */}
           <div className="flex items-center gap-3 shrink-0">
             {/* Registry mark — a simple civic device, no emoji */}
@@ -288,12 +299,15 @@ export default function Home() {
 
             {u && (
               <div className="flex items-center gap-2">
-                <span className="text-[13px] text-[#57606A] hidden md:block">{u.name}</span>
+                <span className="text-[13px] text-[#57606A] hidden md:block">
+                  {u.name}
+                </span>
                 <span
-                  className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${admin
-                    ? "bg-[#DDF4FF] text-[#0969DA] border border-[#54AEFF]"
-                    : "bg-[#DAFBE1] text-[#1A7F37] border border-[#4AC26B]"
-                    }`}
+                  className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${
+                    admin
+                      ? "bg-[#DDF4FF] text-[#0969DA] border border-[#54AEFF]"
+                      : "bg-[#DAFBE1] text-[#1A7F37] border border-[#4AC26B]"
+                  }`}
                 >
                   {u.role}
                 </span>
@@ -315,11 +329,15 @@ export default function Home() {
 
       {/* ── Page shell ──────────────────────────────────────────────── */}
       <div className="max-w-[1280px] mx-auto px-6 pt-6 pb-12">
-
         {/* Page title row */}
         <div className="mb-6">
           <p className="text-[11px] text-[#57606A] uppercase tracking-wider mb-1 font-medium">
-            {superAdmin ? "Super Administrator" : admin ? "Administrator" : "Customer"} Dashboard
+            {superAdmin
+              ? "Super Administrator"
+              : admin
+                ? "Administrator"
+                : "Customer"}{" "}
+            Dashboard
           </p>
           <h1 className="text-base font-semibold text-[#24292F]">
             {view === "lands" && "Land Records"}
@@ -340,9 +358,9 @@ export default function Home() {
             ["transactions", "Transactions"],
             ...(admin
               ? [
-                ["admin", "Administration"],
-                ["explorer", "Block Explorer"],
-              ]
+                  ["admin", "Administration"],
+                  ["explorer", "Block Explorer"],
+                ]
               : []),
           ].map(([k, label]) => (
             <button
@@ -351,10 +369,11 @@ export default function Home() {
                 setView(k);
                 setSel(null);
               }}
-              className={`px-4 py-2 text-[13px] font-medium border-none cursor-pointer bg-transparent transition-colors relative -mb-px ${view === k
-                ? "text-[#3B5BDB]"
-                : "text-[#57606A] hover:text-[#24292F]"
-                }`}
+              className={`px-4 py-2 text-[13px] font-medium border-none cursor-pointer bg-transparent transition-colors relative -mb-px ${
+                view === k
+                  ? "text-[#3B5BDB]"
+                  : "text-[#57606A] hover:text-[#24292F]"
+              }`}
               style={view === k ? { borderBottom: "2px solid #3B5BDB" } : {}}
             >
               {label}
@@ -381,8 +400,12 @@ export default function Home() {
             {view === "lands" && (
               <div className={card}>
                 <div className="px-4 py-3 border-b border-[#D0D7DE] flex items-center justify-between bg-white">
-                  <span className="text-sm font-medium text-[#24292F]">All Land Records</span>
-                  <span className="text-[11px] text-[#57606A]">{lands.length} records</span>
+                  <span className="text-sm font-medium text-[#24292F]">
+                    All Land Records
+                  </span>
+                  <span className="text-[11px] text-[#57606A]">
+                    {lands.length} records
+                  </span>
                 </div>
                 <div className="overflow-x-auto bg-white">
                   <table className="w-full border-collapse">
@@ -400,7 +423,10 @@ export default function Home() {
                     <tbody>
                       {lands.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="text-center py-14 text-[#57606A] text-[13px]">
+                          <td
+                            colSpan={7}
+                            className="text-center py-14 text-[#57606A] text-[13px]"
+                          >
                             No land records found.
                           </td>
                         </tr>
@@ -412,18 +438,32 @@ export default function Home() {
                             className={`cursor-pointer transition-colors hover:bg-[#F6F8FA] ${sel?.id === l.id ? "bg-[#F3F4F6]" : ""}`}
                           >
                             <td className={tdMono}>
-                              <span className="text-[#0969DA] font-medium">{l.id}</span>
+                              <span className="text-[#0969DA] font-medium">
+                                {l.id}
+                              </span>
                             </td>
-                            <td className={`${td} text-[#57606A]`}>{cn(l.owner)}</td>
-                            <td className={`${td} text-[#24292F]`}>{l.location}</td>
-                            <td className={`${td} font-mono text-[#57606A]`}>{l.area} m²</td>
+                            <td className={`${td} text-[#57606A]`}>
+                              {cn(l.owner)}
+                            </td>
+                            <td className={`${td} text-[#24292F]`}>
+                              {l.location}
+                            </td>
+                            <td className={`${td} font-mono text-[#57606A]`}>
+                              {l.area} m²
+                            </td>
                             <td className={td}>
                               <Badge status={l.status} />
                             </td>
                             <td className={`${td} font-mono text-[#24292F]`}>
-                              {l.price ? `Rs. ${l.price}` : <span className="text-[#8C95A0]">—</span>}
+                              {l.price ? (
+                                `Rs. ${l.price}`
+                              ) : (
+                                <span className="text-[#8C95A0]">—</span>
+                              )}
                             </td>
-                            <td className={`${td} text-[#57606A] font-mono`}>{l.transferCount || 0}</td>
+                            <td className={`${td} text-[#57606A] font-mono`}>
+                              {l.transferCount || 0}
+                            </td>
                           </tr>
                         ))
                       )}
@@ -434,52 +474,92 @@ export default function Home() {
                 {/* Expanded detail panel */}
                 {sel && (
                   <div className="border-t border-[#D0D7DE] bg-[#F8FAFC] px-6 py-4 animate-slide-up">
-                    <p className="text-[11px] text-[#57606A] uppercase tracking-wider mb-3 font-medium">Record Detail</p>
+                    <p className="text-[11px] text-[#57606A] uppercase tracking-wider mb-3 font-medium">
+                      Record Detail
+                    </p>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-3">
                       <div>
-                        <p className="text-[11px] text-[#57606A] mb-0.5">Plot ID</p>
-                        <p className="font-mono text-[13px] text-[#0969DA] font-medium">{sel.id}</p>
+                        <p className="text-[11px] text-[#57606A] mb-0.5">
+                          Plot ID
+                        </p>
+                        <p className="font-mono text-[13px] text-[#0969DA] font-medium">
+                          {sel.id}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#57606A] mb-0.5">Current Owner</p>
-                        <p className="text-[13px] text-[#24292F] font-medium">{sel.owner}</p>
+                        <p className="text-[11px] text-[#57606A] mb-0.5">
+                          Current Owner
+                        </p>
+                        <p className="text-[13px] text-[#24292F] font-medium">
+                          {sel.owner}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#57606A] mb-0.5">Previous Owner</p>
-                        <p className="text-[13px] text-[#57606A]">{sel.previousOwner || "—"}</p>
+                        <p className="text-[11px] text-[#57606A] mb-0.5">
+                          Previous Owner
+                        </p>
+                        <p className="text-[13px] text-[#57606A]">
+                          {sel.previousOwner || "—"}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#57606A] mb-0.5">Location</p>
-                        <p className="text-[13px] text-[#24292F]">{sel.location}</p>
+                        <p className="text-[11px] text-[#57606A] mb-0.5">
+                          Location
+                        </p>
+                        <p className="text-[13px] text-[#24292F]">
+                          {sel.location}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#57606A] mb-0.5">Area</p>
-                        <p className="font-mono text-[13px] text-[#24292F]">{sel.area} m²</p>
+                        <p className="text-[11px] text-[#57606A] mb-0.5">
+                          Area
+                        </p>
+                        <p className="font-mono text-[13px] text-[#24292F]">
+                          {sel.area} m²
+                        </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#57606A] mb-0.5">Status</p>
+                        <p className="text-[11px] text-[#57606A] mb-0.5">
+                          Status
+                        </p>
                         <Badge status={sel.status} />
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#57606A] mb-0.5">Listed Price</p>
-                        <p className="font-mono text-[13px] text-[#24292F]">{sel.price ? `Rs. ${sel.price}` : "—"}</p>
+                        <p className="text-[11px] text-[#57606A] mb-0.5">
+                          Listed Price
+                        </p>
+                        <p className="font-mono text-[13px] text-[#24292F]">
+                          {sel.price ? `Rs. ${sel.price}` : "—"}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#57606A] mb-0.5">Transfer Count</p>
-                        <p className="font-mono text-[13px] text-[#24292F]">{sel.transferCount || 0}</p>
+                        <p className="text-[11px] text-[#57606A] mb-0.5">
+                          Transfer Count
+                        </p>
+                        <p className="font-mono text-[13px] text-[#24292F]">
+                          {sel.transferCount || 0}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#57606A] mb-0.5">Registered</p>
-                        <p className="font-mono text-[13px] text-[#57606A]">{sel.registeredAt?.slice(0, 10)}</p>
+                        <p className="text-[11px] text-[#57606A] mb-0.5">
+                          Registered
+                        </p>
+                        <p className="font-mono text-[13px] text-[#57606A]">
+                          {sel.registeredAt?.slice(0, 10)}
+                        </p>
                       </div>
                       {sel.lastTransfer && (
                         <div className="col-span-2 md:col-span-3">
-                          <p className="text-[11px] text-[#57606A] mb-0.5">Last Sale</p>
+                          <p className="text-[11px] text-[#57606A] mb-0.5">
+                            Last Sale
+                          </p>
                           <p className="text-[13px] text-[#24292F]">
                             {cn(sel.lastTransfer.from)}{" "}
                             <span className="text-[#8C95A0]">→</span>{" "}
                             {cn(sel.lastTransfer.to)}{" "}
-                            <span className="font-mono text-[#57606A] ml-1 font-medium">Rs. {sel.lastTransfer.price}</span>
+                            <span className="font-mono text-[#57606A] ml-1 font-medium">
+                              Rs. {sel.lastTransfer.price}
+                            </span>
                           </p>
                         </div>
                       )}
@@ -494,10 +574,14 @@ export default function Home() {
               <>
                 {/* List for sale form */}
                 <div className={fc}>
-                  <p className="text-sm font-medium text-[#24292F] mb-4">List Your Land for Sale</p>
+                  <p className="text-sm font-medium text-[#24292F] mb-4">
+                    List Your Land for Sale
+                  </p>
                   <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-3 mb-4">
                     <div>
-                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">Select a parcel</label>
+                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">
+                        Select a parcel
+                      </label>
                       <select
                         className={sel}
                         value={f.landId}
@@ -516,13 +600,22 @@ export default function Home() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">Asking price (Rs.)</label>
+                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">
+                        Asking price (Rs.)
+                      </label>
                       <input
                         className={inp}
                         placeholder="0"
                         type="number"
+                        min="0"
                         value={f.price}
-                        onChange={(e) => setF({ ...f, price: e.target.value })}
+                        onChange={(e) => {
+                          const value = Math.max(
+                            0,
+                            Number(e.target.value) || 0,
+                          );
+                          setF({ ...f, price: value });
+                        }}
                       />
                     </div>
                   </div>
@@ -545,8 +638,12 @@ export default function Home() {
                 {/* Active listings table */}
                 <div className={card}>
                   <div className="px-4 py-3 border-b border-[#D0D7DE] flex items-center justify-between">
-                    <span className="text-sm font-medium text-[#24292F]">Active Listings</span>
-                    <span className="text-[11px] text-[#57606A]">{listings.length} listed</span>
+                    <span className="text-sm font-medium text-[#24292F]">
+                      Active Listings
+                    </span>
+                    <span className="text-[11px] text-[#57606A]">
+                      {listings.length} listed
+                    </span>
                   </div>
                   {listings.length === 0 ? (
                     <div className="text-center py-14 text-[#57606A] text-[13px]">
@@ -574,48 +671,63 @@ export default function Home() {
                                 o.status === "pending",
                             );
                             return (
-                              <tr key={l.id} className="hover:bg-[#F6F8FA] transition-colors border-b border-[#F0F2F5] last:border-none">
+                              <tr
+                                key={l.id}
+                                className="hover:bg-[#F6F8FA] transition-colors border-b border-[#F0F2F5] last:border-none"
+                              >
                                 <td className={tdMono}>
-                                  <span className="text-[#0969DA] font-medium">{l.landId}</span>
+                                  <span className="text-[#0969DA] font-medium">
+                                    {l.landId}
+                                  </span>
                                 </td>
-                                <td className={`${td} text-[#57606A]`}>{cn(l.seller)}</td>
-                                <td className={`${td} font-mono text-[#24292F]`}>Rs. {l.price}</td>
+                                <td className={`${td} text-[#57606A]`}>
+                                  {cn(l.seller)}
+                                </td>
+                                <td
+                                  className={`${td} font-mono text-[#24292F]`}
+                                >
+                                  Rs. {l.price}
+                                </td>
                                 <td className={td}>
                                   <Badge status={l.status} />
                                 </td>
                                 <td className={td}>
-                                  {!isOwner && l.status === "active" && !myOffer && (
-                                    <div className="flex gap-2 items-center">
-                                      <input
-                                        className={`${inp} w-24`}
-                                        placeholder="Bid"
-                                        type="number"
-                                        value={offerPrices[l.landId] || ""}
-                                        onChange={(e) =>
-                                          setOfferPrices({
-                                            ...offerPrices,
-                                            [l.landId]: e.target.value,
-                                          })
-                                        }
-                                      />
-                                      <button
-                                        className={`${btn} ${btnSuc} ${btnSm}`}
-                                        onClick={() =>
-                                          act(
-                                            "make-offer",
-                                            {
-                                              landId: l.landId,
-                                              offeredPrice:
-                                                parseFloat(offerPrices[l.landId]) || l.price,
-                                            },
-                                            "o",
-                                          )
-                                        }
-                                      >
-                                        Place Bid
-                                      </button>
-                                    </div>
-                                  )}
+                                  {!isOwner &&
+                                    l.status === "active" &&
+                                    !myOffer && (
+                                      <div className="flex gap-2 items-center">
+                                        <input
+                                          className={`${inp} w-24`}
+                                          placeholder="Bid"
+                                          type="number"
+                                          value={offerPrices[l.landId] || ""}
+                                          onChange={(e) =>
+                                            setOfferPrices({
+                                              ...offerPrices,
+                                              [l.landId]: e.target.value,
+                                            })
+                                          }
+                                        />
+                                        <button
+                                          className={`${btn} ${btnSuc} ${btnSm}`}
+                                          onClick={() =>
+                                            act(
+                                              "make-offer",
+                                              {
+                                                landId: l.landId,
+                                                offeredPrice:
+                                                  parseFloat(
+                                                    offerPrices[l.landId],
+                                                  ) || l.price,
+                                              },
+                                              "o",
+                                            )
+                                          }
+                                        >
+                                          Place Bid
+                                        </button>
+                                      </div>
+                                    )}
                                   {!isOwner && myOffer && (
                                     <div className="flex gap-2 items-center">
                                       <input
@@ -623,7 +735,8 @@ export default function Home() {
                                         placeholder="New price"
                                         type="number"
                                         value={
-                                          offerPrices[l.landId] ?? myOffer.offeredPrice
+                                          offerPrices[l.landId] ??
+                                          myOffer.offeredPrice
                                         }
                                         onChange={(e) =>
                                           setOfferPrices({
@@ -640,8 +753,9 @@ export default function Home() {
                                             {
                                               landId: l.landId,
                                               offeredPrice:
-                                                parseFloat(offerPrices[l.landId]) ||
-                                                myOffer.offeredPrice,
+                                                parseFloat(
+                                                  offerPrices[l.landId],
+                                                ) || myOffer.offeredPrice,
                                             },
                                             "o",
                                           )
@@ -686,10 +800,14 @@ export default function Home() {
               <>
                 {/* Incoming offers — need a landId input */}
                 <div className={fc}>
-                  <p className="text-sm font-medium text-[#24292F] mb-4">Offers Received on Your Land</p>
+                  <p className="text-sm font-medium text-[#24292F] mb-4">
+                    Offers Received on Your Land
+                  </p>
                   <div className="flex gap-3 items-end max-w-xs">
                     <div className="flex-1">
-                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">Select parcel</label>
+                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">
+                        Select parcel
+                      </label>
                       <select
                         className={sel}
                         value={f.landViewId}
@@ -728,12 +846,20 @@ export default function Home() {
                           <div className="flex justify-between items-center gap-4">
                             <div className="flex items-center gap-4">
                               <div>
-                                <p className="text-[11px] text-[#57606A] mb-0.5">Buyer</p>
-                                <p className="text-[13px] text-[#24292F] font-medium">{cn(o.buyer)}</p>
+                                <p className="text-[11px] text-[#57606A] mb-0.5">
+                                  Buyer
+                                </p>
+                                <p className="text-[13px] text-[#24292F] font-medium">
+                                  {cn(o.buyer)}
+                                </p>
                               </div>
                               <div>
-                                <p className="text-[11px] text-[#57606A] mb-0.5">Offer</p>
-                                <p className="font-mono text-[13px] text-[#24292F] font-medium">Rs. {o.offeredPrice}</p>
+                                <p className="text-[11px] text-[#57606A] mb-0.5">
+                                  Offer
+                                </p>
+                                <p className="font-mono text-[13px] text-[#24292F] font-medium">
+                                  Rs. {o.offeredPrice}
+                                </p>
                               </div>
                               <Badge status={o.status} />
                             </div>
@@ -769,8 +895,12 @@ export default function Home() {
                 {/* My outgoing offers */}
                 <div className={card}>
                   <div className="px-4 py-3 border-b border-[#D0D7DE] flex items-center justify-between">
-                    <span className="text-sm font-medium text-[#24292F]">My Submitted Offers</span>
-                    <span className="text-[11px] text-[#57606A]">{offers.length} offers</span>
+                    <span className="text-sm font-medium text-[#24292F]">
+                      My Submitted Offers
+                    </span>
+                    <span className="text-[11px] text-[#57606A]">
+                      {offers.length} offers
+                    </span>
                   </div>
                   {offers.length === 0 ? (
                     <div className="text-center py-14 text-[#57606A] text-[13px]">
@@ -788,11 +918,18 @@ export default function Home() {
                         </thead>
                         <tbody>
                           {offers.map((o) => (
-                            <tr key={o.id} className="hover:bg-[#F6F8FA] transition-colors border-b border-[#F0F2F5] last:border-none">
+                            <tr
+                              key={o.id}
+                              className="hover:bg-[#F6F8FA] transition-colors border-b border-[#F0F2F5] last:border-none"
+                            >
                               <td className={tdMono}>
-                                <span className="text-[#0969DA] font-medium">{o.landId}</span>
+                                <span className="text-[#0969DA] font-medium">
+                                  {o.landId}
+                                </span>
                               </td>
-                              <td className={`${td} font-mono text-[#24292F]`}>Rs. {o.offeredPrice}</td>
+                              <td className={`${td} font-mono text-[#24292F]`}>
+                                Rs. {o.offeredPrice}
+                              </td>
                               <td className={td}>
                                 <Badge status={o.status} />
                               </td>
@@ -826,11 +963,17 @@ export default function Home() {
                         >
                           <div className="flex items-center gap-6">
                             <div>
-                              <p className="text-[11px] text-[#57606A] mb-0.5">Land</p>
-                              <p className="font-mono text-[13px] text-[#0969DA] font-medium">{tx.landId}</p>
+                              <p className="text-[11px] text-[#57606A] mb-0.5">
+                                Land
+                              </p>
+                              <p className="font-mono text-[13px] text-[#0969DA] font-medium">
+                                {tx.landId}
+                              </p>
                             </div>
                             <div>
-                              <p className="text-[11px] text-[#57606A] mb-0.5">Transfer</p>
+                              <p className="text-[11px] text-[#57606A] mb-0.5">
+                                Transfer
+                              </p>
                               <p className="text-[13px] text-[#24292F]">
                                 {cn(tx.seller)}{" "}
                                 <span className="text-[#8C95A0]">→</span>{" "}
@@ -838,18 +981,32 @@ export default function Home() {
                               </p>
                             </div>
                             <div>
-                              <p className="text-[11px] text-[#57606A] mb-0.5">Price</p>
-                              <p className="font-mono text-[13px] text-[#24292F] font-medium">Rs. {tx.price}</p>
+                              <p className="text-[11px] text-[#57606A] mb-0.5">
+                                Price
+                              </p>
+                              <p className="font-mono text-[13px] text-[#24292F] font-medium">
+                                Rs. {tx.price}
+                              </p>
                             </div>
                             <div>
-                              <p className="text-[11px] text-[#57606A] mb-0.5">Submitted</p>
-                              <p className="font-mono text-[11px] text-[#57606A]">{tx.createdAt?.slice(0, 10)}</p>
+                              <p className="text-[11px] text-[#57606A] mb-0.5">
+                                Submitted
+                              </p>
+                              <p className="font-mono text-[11px] text-[#57606A]">
+                                {tx.createdAt?.slice(0, 10)}
+                              </p>
                             </div>
                           </div>
                           <button
                             className={`${btn} ${btnSuc} ${btnSm} shrink-0`}
                             onClick={() =>
-                              act("admin-approve", { txId: tx.id }, "l", "ls", "t")
+                              act(
+                                "admin-approve",
+                                { txId: tx.id },
+                                "l",
+                                "ls",
+                                "t",
+                              )
                             }
                           >
                             Approve Transfer
@@ -863,8 +1020,12 @@ export default function Home() {
                 {/* My transactions */}
                 <div className={card}>
                   <div className="px-4 py-3 border-b border-[#D0D7DE] flex items-center justify-between">
-                    <span className="text-sm font-medium text-[#24292F]">My Transactions</span>
-                    <span className="text-[11px] text-[#57606A]">{txs.length} records</span>
+                    <span className="text-sm font-medium text-[#24292F]">
+                      My Transactions
+                    </span>
+                    <span className="text-[11px] text-[#57606A]">
+                      {txs.length} records
+                    </span>
                   </div>
                   {txs.length === 0 ? (
                     <div className="text-center py-14 text-[#57606A] text-[13px]">
@@ -889,34 +1050,48 @@ export default function Home() {
                             const amBuyer = tx.buyer === call;
                             const amSeller = tx.seller === call;
                             return (
-                              <tr key={tx.id} className="hover:bg-[#F6F8FA] transition-colors border-b border-[#F0F2F5] last:border-none">
+                              <tr
+                                key={tx.id}
+                                className="hover:bg-[#F6F8FA] transition-colors border-b border-[#F0F2F5] last:border-none"
+                              >
                                 <td className={tdMono}>
-                                  <span className="text-[#0969DA] font-medium">{tx.landId}</span>
+                                  <span className="text-[#0969DA] font-medium">
+                                    {tx.landId}
+                                  </span>
                                 </td>
-                                <td className={`${td} text-[#57606A]`}>{cn(tx.seller)}</td>
-                                <td className={`${td} text-[#57606A]`}>{cn(tx.buyer)}</td>
-                                <td className={`${td} font-mono text-[#24292F]`}>Rs. {tx.price}</td>
+                                <td className={`${td} text-[#57606A]`}>
+                                  {cn(tx.seller)}
+                                </td>
+                                <td className={`${td} text-[#57606A]`}>
+                                  {cn(tx.buyer)}
+                                </td>
+                                <td
+                                  className={`${td} font-mono text-[#24292F]`}
+                                >
+                                  Rs. {tx.price}
+                                </td>
                                 <td className={td}>
                                   <Badge status={tx.status} />
                                 </td>
                                 <td className={td}>
                                   <div className="flex gap-2">
-                                    {amBuyer && tx.status === "pending_buyer_confirm" && (
-                                      <button
-                                        className={`${btn} ${btnSuc} ${btnSm}`}
-                                        onClick={() =>
-                                          act(
-                                            "confirm-transaction",
-                                            { txId: tx.id },
-                                            "l",
-                                            "ls",
-                                            "t",
-                                          )
-                                        }
-                                      >
-                                        Confirm
-                                      </button>
-                                    )}
+                                    {amBuyer &&
+                                      tx.status === "pending_buyer_confirm" && (
+                                        <button
+                                          className={`${btn} ${btnSuc} ${btnSm}`}
+                                          onClick={() =>
+                                            act(
+                                              "confirm-transaction",
+                                              { txId: tx.id },
+                                              "l",
+                                              "ls",
+                                              "t",
+                                            )
+                                          }
+                                        >
+                                          Confirm
+                                        </button>
+                                      )}
                                     {(amBuyer || amSeller) &&
                                       tx.status !== "completed" &&
                                       tx.status !== "rejected" && (
@@ -953,13 +1128,18 @@ export default function Home() {
               <>
                 {/* Register Land */}
                 <div className={fc}>
-                  <p className="text-sm font-medium text-[#24292F] mb-1">Register New Land Parcel</p>
+                  <p className="text-sm font-medium text-[#24292F] mb-1">
+                    Register New Land Parcel
+                  </p>
                   <p className="text-[11px] text-[#57606A] mb-4">
-                    Enter plot details below. Plot ID and owner address are required.
+                    Enter plot details below. Plot ID and owner address are
+                    required.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                     <div>
-                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">Plot ID *</label>
+                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">
+                        Plot ID *
+                      </label>
                       <input
                         className={inp}
                         placeholder="e.g. PLT-0042"
@@ -968,7 +1148,9 @@ export default function Home() {
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">Owner Address *</label>
+                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">
+                        Owner Address *
+                      </label>
                       <input
                         className={inp}
                         placeholder="User1@org1.example.com"
@@ -977,16 +1159,22 @@ export default function Home() {
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">Location</label>
+                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">
+                        Location
+                      </label>
                       <input
                         className={inp}
                         placeholder="District, Ward"
                         value={f.location}
-                        onChange={(e) => setF({ ...f, location: e.target.value })}
+                        onChange={(e) =>
+                          setF({ ...f, location: e.target.value })
+                        }
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">Area (m²)</label>
+                      <label className="text-[11px] text-[#57606A] block mb-1 font-medium">
+                        Area (m²)
+                      </label>
                       <input
                         className={inp}
                         placeholder="0"
@@ -1027,7 +1215,9 @@ export default function Home() {
                 {/* Pending admin transactions */}
                 <div className={card}>
                   <div className="px-4 py-3 border-b border-[#D0D7DE] flex items-center justify-between">
-                    <span className="text-sm font-medium text-[#24292F]">Pending Approvals</span>
+                    <span className="text-sm font-medium text-[#24292F]">
+                      Pending Approvals
+                    </span>
                     {pendingTxs.length > 0 && (
                       <span className="text-[11px] text-[#9A6700] font-medium">
                         {pendingTxs.length} waiting
@@ -1046,11 +1236,17 @@ export default function Home() {
                       >
                         <div className="flex items-center gap-6">
                           <div>
-                            <p className="text-[11px] text-[#57606A] mb-0.5">Land</p>
-                            <p className="font-mono text-[13px] text-[#0969DA] font-medium">{tx.landId}</p>
+                            <p className="text-[11px] text-[#57606A] mb-0.5">
+                              Land
+                            </p>
+                            <p className="font-mono text-[13px] text-[#0969DA] font-medium">
+                              {tx.landId}
+                            </p>
                           </div>
                           <div>
-                            <p className="text-[11px] text-[#57606A] mb-0.5">Transfer</p>
+                            <p className="text-[11px] text-[#57606A] mb-0.5">
+                              Transfer
+                            </p>
                             <p className="text-[13px] text-[#24292F]">
                               {cn(tx.seller)}{" "}
                               <span className="text-[#8C95A0]">→</span>{" "}
@@ -1058,8 +1254,12 @@ export default function Home() {
                             </p>
                           </div>
                           <div>
-                            <p className="text-[11px] text-[#57606A] mb-0.5">Value</p>
-                            <p className="font-mono text-[13px] text-[#24292F] font-medium">Rs. {tx.price}</p>
+                            <p className="text-[11px] text-[#57606A] mb-0.5">
+                              Value
+                            </p>
+                            <p className="font-mono text-[13px] text-[#24292F] font-medium">
+                              Rs. {tx.price}
+                            </p>
                           </div>
                           <p className="font-mono text-[11px] text-[#57606A] hidden md:block">
                             {tx.createdAt?.slice(0, 10)}
@@ -1068,7 +1268,13 @@ export default function Home() {
                         <button
                           className={`${btn} ${btnSuc} ${btnSm} shrink-0`}
                           onClick={() =>
-                            act("admin-approve", { txId: tx.id }, "l", "ls", "t")
+                            act(
+                              "admin-approve",
+                              { txId: tx.id },
+                              "l",
+                              "ls",
+                              "t",
+                            )
                           }
                         >
                           Approve
@@ -1084,7 +1290,9 @@ export default function Home() {
             {view === "explorer" && admin && explorer && (
               <div className={card}>
                 <div className="px-4 py-3 border-b border-[#D0D7DE] flex items-center justify-between">
-                  <span className="text-sm font-medium text-[#24292F]">Block Explorer</span>
+                  <span className="text-sm font-medium text-[#24292F]">
+                    Block Explorer
+                  </span>
                   <span className="font-mono text-[11px] text-[#57606A]">
                     Height: {explorer.height}
                   </span>
@@ -1140,24 +1348,37 @@ export default function Home() {
                                     <div className="mt-1 flex flex-col gap-0.5">
                                       {tx.type && (
                                         <p className="text-[10px] text-[#57606A]">
-                                          <span className="text-[#8C95A0]">type </span>{tx.type}
+                                          <span className="text-[#8C95A0]">
+                                            type{" "}
+                                          </span>
+                                          {tx.type}
                                         </p>
                                       )}
                                       {tx.creator && (
                                         <p className="text-[10px] text-[#57606A] truncate">
-                                          <span className="text-[#8C95A0]">by </span>{tx.creator}
+                                          <span className="text-[#8C95A0]">
+                                            by{" "}
+                                          </span>
+                                          {tx.creator}
                                         </p>
                                       )}
                                       {tx.chaincode && (
                                         <p className="font-mono text-[10px] text-[#57606A]">
-                                          <span className="text-[#8C95A0]">cc </span>{tx.chaincode}
+                                          <span className="text-[#8C95A0]">
+                                            cc{" "}
+                                          </span>
+                                          {tx.chaincode}
                                         </p>
                                       )}
                                       {tx.action && (
                                         <p className="font-mono text-[10px] text-[#8C95A0] truncate">
-                                          <span className="text-[#0969DA] font-medium">{tx.action}</span>
+                                          <span className="text-[#0969DA] font-medium">
+                                            {tx.action}
+                                          </span>
                                           {tx.args?.length > 0 && (
-                                            <span className="text-[#57606A]">({tx.args.join(", ")})</span>
+                                            <span className="text-[#57606A]">
+                                              ({tx.args.join(", ")})
+                                            </span>
                                           )}
                                         </p>
                                       )}
@@ -1213,10 +1434,11 @@ export default function Home() {
       {/* ── Toast notification ────────────────────────────────────── */}
       {toast && (
         <div
-          className={`fixed bottom-6 right-6 px-4 py-3 rounded-lg text-[13px] font-medium z-50 animate-slide-up border ${toast.ok
-            ? "bg-[#DAFBE1] border-[#4AC26B] text-[#1A7F37]"
-            : "bg-[#FFEBEB] border-[#FFC1C1] text-[#CF222E]"
-            }`}
+          className={`fixed bottom-6 right-6 px-4 py-3 rounded-lg text-[13px] font-medium z-50 animate-slide-up border ${
+            toast.ok
+              ? "bg-[#DAFBE1] border-[#4AC26B] text-[#1A7F37]"
+              : "bg-[#FFEBEB] border-[#FFC1C1] text-[#CF222E]"
+          }`}
         >
           {toast.msg}
         </div>
