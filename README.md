@@ -64,11 +64,9 @@ Land records track ownership, mortgages, and legal disputes. Transfers require e
 # First time: full build (generates crypto, deploys chaincode, seeds data)
 ./scripts/rebuild.sh
 
-# Fast restart: brings up containers if stopped
-./scripts/quickstart.sh
-
-# Stop everything
-./scripts/stop.sh
+# Or start/stop from project root
+docker compose up -d
+docker compose down
 ```
 
 Open **http://localhost:3000** — live land registry dashboard.
@@ -79,6 +77,8 @@ Open **http://localhost:3000** — live land registry dashboard.
 
 ```
 ndhack/
+├── docker-compose.yaml         # include: network/docker-compose.yaml
+├── .env                         # COMPOSE_PROJECT_NAME=fabric
 ├── backend/                        # Go backend + chaincode
 │   ├── Dockerfile                  # Builds Go server in alpine container
 │   ├── main.go                     # HTTP server (Gin, :8080)
@@ -96,7 +96,7 @@ ndhack/
 ├── network/
 │   ├── docker-compose.yaml         # 7 services: orderer, 3 peers, CLI, backend, frontend
 │   ├── crypto-config.yaml          # Org topology → generates MSP certs
-│   ├── configtx.yaml               # Channel, genesis, consortium (auto-generated)
+│   ├── configtx.yaml               # Channel, genesis, consortium (committed)
 │   ├── core.yaml                   # Peer config reference
 │   └── orderer.yaml                # Orderer config reference
 │
@@ -108,8 +108,8 @@ ndhack/
 │   └── package.json                # next + react only
 │
 ├── scripts/
-│   ├── rebuild.sh                  # Full rebuild (crypto → channel → chaincode → seed)
-│   ├── quickstart.sh               # docker compose up --build
+│   ├── rebuild.sh                  # Full rebuild
+│   ├── quickstart.sh               # docker compose up -d --build
 │   └── stop.sh                     # docker compose down -v
 │
 ├── .gitignore
@@ -194,7 +194,7 @@ Change `3` → `11` in:
 |------|--------|
 | `network/crypto-config.yaml` | Add Province4–Province11 |
 | `scripts/rebuild.sh` | `seq 1 3` → `seq 1 11` |
-| `scripts/rebuild.sh` | `OutOf(3, ...)` → `OutOf(9, ...)` endorsement |
+| `network/configtx.yaml` | Edit `OutOf(3, ...)` → `OutOf(9, ...)` endorsement |
 
 Endorsement: 9 of 11 = 75% approval.
 
@@ -203,9 +203,12 @@ Endorsement: 9 of 11 = 75% approval.
 ## Useful Commands
 
 ```bash
+# Start / stop
+docker compose up -d
+docker compose down
+
 # Logs
-docker logs landreg-backend -f
-docker logs landreg-frontend -f
+docker compose logs -f backend
 docker logs peer0.province1.example.com -f
 
 # Admin shell
@@ -213,7 +216,6 @@ docker exec -it cli bash
 
 # Chaincode info
 docker exec cli peer lifecycle chaincode querycommitted -C mychannel
-docker exec cli peer channel getinfo -c mychannel
 
 # Backend health
 curl http://localhost:8080/health

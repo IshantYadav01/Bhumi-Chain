@@ -1,0 +1,2 @@
+include:
+  - network/docker-compose.yaml
