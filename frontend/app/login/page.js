@@ -109,30 +109,12 @@ export default function LoginPage() {
               </tr>
               <tr>
                 <td style={styles.credsTd}>
-                  <code>bank1</code>
-                </td>
-                <td style={styles.credsTd}>
-                  <code>bank123</code>
-                </td>
-                <td style={styles.credsTd}>Set/clear mortgages</td>
-              </tr>
-              <tr>
-                <td style={styles.credsTd}>
-                  <code>court1</code>
-                </td>
-                <td style={styles.credsTd}>
-                  <code>court123</code>
-                </td>
-                <td style={styles.credsTd}>Resolve disputes</td>
-              </tr>
-              <tr>
-                <td style={styles.credsTd}>
                   <code>seller1</code>
                 </td>
                 <td style={styles.credsTd}>
                   <code>seller123</code>
                 </td>
-                <td style={styles.credsTd}>Sell own land</td>
+                <td style={styles.credsTd}>Land buyer</td>
               </tr>
               <tr>
                 <td style={styles.credsTd}>

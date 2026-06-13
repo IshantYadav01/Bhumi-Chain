@@ -156,8 +156,6 @@ const S = {
 function statusBadge(status) {
   const map = {
     active: { color: "#22c55e", bg: "#22c55e22" },
-    mortgaged: { color: "#f59e0b", bg: "#f59e0b22" },
-    disputed: { color: "#ef4444", bg: "#ef444422" },
   };
   const s = map[status] || { color: "#888", bg: "#88822" };
   return <span style={S.badge(s.color, s.bg)}>{status}</span>;
@@ -172,7 +170,7 @@ export default function Home() {
   const [toast, setToast] = useState(null);
   const [selected, setSelected] = useState(null);
   const [networkStatus, setNetworkStatus] = useState("checking");
-  const [tab, setTab] = useState("all"); // all | active | mortgaged | disputed
+  const [tab, setTab] = useState("all"); // all | active
   const [filterOwner, setFilterOwner] = useState("");
   const [userInfo, setUserInfo] = useState(null);
   const [sales, setSales] = useState([]);
@@ -204,13 +202,6 @@ export default function Home() {
     landType: "residential",
     buyer: "",
     price: "",
-    bank: "",
-    amount: "",
-    startDate: "",
-    endDate: "",
-    caseNumber: "",
-    court: "",
-    description: "",
   });
 
   const clearForm = () =>
@@ -224,13 +215,6 @@ export default function Home() {
       landType: "residential",
       buyer: "",
       price: "",
-      bank: "",
-      amount: "",
-      startDate: "",
-      endDate: "",
-      caseNumber: "",
-      court: "",
-      description: "",
     });
 
   const showToast = (msg, ok = true) => {
@@ -449,7 +433,7 @@ export default function Home() {
         }}
       >
         <div style={S.tabBar}>
-          {["all", "active", "mortgaged", "disputed"].map((t) => (
+          {["all", "active"].map((t) => (
             <button
               key={t}
               style={S.tab(tab === t)}
@@ -495,7 +479,6 @@ export default function Home() {
               <th style={S.th}>Area (m²)</th>
               <th style={S.th}>Type</th>
               <th style={S.th}>Status</th>
-              <th style={S.th}>Mortgage / Dispute</th>
               <th style={S.th}></th>
             </tr>
           </thead>
@@ -503,7 +486,7 @@ export default function Home() {
             {loading && filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={8}
                   style={{ textAlign: "center", padding: 40, color: "#666" }}
                 >
                   Loading...
@@ -512,7 +495,7 @@ export default function Home() {
             ) : filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={8}
                   style={{ textAlign: "center", padding: 40, color: "#666" }}
                 >
                   No land records. Register one below.
@@ -538,47 +521,7 @@ export default function Home() {
                   <td style={S.td}>{l.area}</td>
                   <td style={S.td}>{l.landType}</td>
                   <td style={S.td}>{statusBadge(l.status)}</td>
-                  <td style={S.td}>
-                    {l.mortgage && (
-                      <span style={S.badge("#f59e0b", "#f59e0b22")}>
-                        🏦 {l.mortgage.bank} (Rs.{l.mortgage.amount})
-                      </span>
-                    )}
-                    {l.dispute && (
-                      <span style={S.badge("#ef4444", "#ef444422")}>
-                        ⚖️ {l.dispute.caseNumber} — {l.dispute.court}
-                      </span>
-                    )}
-                  </td>
-                  <td style={S.td}>
-                    {l.status === "active" && (
-                      <button
-                        style={{ ...S.btn, ...S.btnDanger, ...S.btnSmall }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          doAction("dispute", {
-                            plotId: l.plotId,
-                            caseNumber: prompt("Case number?"),
-                            court: prompt("Court?"),
-                            description: prompt("Description?"),
-                          });
-                        }}
-                      >
-                        Dispute
-                      </button>
-                    )}
-                    {l.status === "disputed" && (
-                      <button
-                        style={{ ...S.btn, ...S.btnOutline, ...S.btnSmall }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          doAction("resolve-dispute", { plotId: l.plotId });
-                        }}
-                      >
-                        Resolve
-                      </button>
-                    )}
-                  </td>
+                  <td style={S.td}></td>
                 </tr>
               ))
             )}
@@ -655,184 +598,6 @@ export default function Home() {
             </button>
           </div>
         )}
-
-        {/* Transfer Land */}
-        {hasRole("seller") && (
-          <div style={S.formCard}>
-            <div style={S.formTitle}>Transfer Land (Sale)</div>
-            <p style={{ fontSize: 12, color: "#777", marginBottom: 10 }}>
-              Endorsed by Municipality · Malpot · Survey
-            </p>
-            <div style={S.inputGrid}>
-              <input
-                style={S.input}
-                placeholder="Plot ID *"
-                value={form.plotId}
-                onChange={(e) => setForm({ ...form, plotId: e.target.value })}
-              />
-              <input
-                style={S.input}
-                placeholder="Buyer *"
-                value={form.buyer}
-                onChange={(e) => setForm({ ...form, buyer: e.target.value })}
-              />
-              <input
-                style={S.input}
-                placeholder="Price (Rs.)"
-                type="number"
-                value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
-              />
-            </div>
-            <button
-              style={{ ...S.btn, ...S.btnOutline }}
-              disabled={!form.plotId || !form.buyer}
-              onClick={() =>
-                doAction("transfer", {
-                  plotId: form.plotId,
-                  buyer: form.buyer,
-                  price: parseFloat(form.price) || 0,
-                }).then((ok) => ok && clearForm())
-              }
-            >
-              Transfer Land
-            </button>
-          </div>
-        )}
-
-        {/* Mortgage */}
-        {hasAnyRole("admin", "bank") && (
-          <div style={S.formCard}>
-            <div style={S.formTitle}>Set Mortgage</div>
-            <div style={S.inputGrid}>
-              <input
-                style={S.input}
-                placeholder="Plot ID *"
-                value={form.plotId}
-                onChange={(e) => setForm({ ...form, plotId: e.target.value })}
-              />
-              <input
-                style={S.input}
-                placeholder="Bank *"
-                value={form.bank}
-                onChange={(e) => setForm({ ...form, bank: e.target.value })}
-              />
-              <input
-                style={S.input}
-                placeholder="Amount (Rs.)"
-                type="number"
-                value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              />
-              <input
-                style={S.input}
-                placeholder="Start Date"
-                value={form.startDate}
-                onChange={(e) =>
-                  setForm({ ...form, startDate: e.target.value })
-                }
-              />
-              <input
-                style={S.input}
-                placeholder="End Date"
-                value={form.endDate}
-                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-              />
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                style={{ ...S.btn, ...S.btnWarning }}
-                disabled={!form.plotId || !form.bank}
-                onClick={() =>
-                  doAction("mortgage", {
-                    plotId: form.plotId,
-                    bank: form.bank,
-                    amount: parseFloat(form.amount) || 0,
-                    startDate: form.startDate,
-                    endDate: form.endDate,
-                  }).then((ok) => ok && clearForm())
-                }
-              >
-                Set Mortgage
-              </button>
-              <button
-                style={{ ...S.btn, ...S.btnOutline, ...S.btnSmall }}
-                disabled={!form.plotId}
-                onClick={() =>
-                  doAction("clear-mortgage", { plotId: form.plotId }).then(
-                    (ok) => ok && clearForm(),
-                  )
-                }
-              >
-                Clear Mortgage
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Dispute */}
-        {hasAnyRole("admin", "court") && (
-          <div style={S.formCard}>
-            <div style={S.formTitle}>File Legal Dispute</div>
-            <div style={S.inputGrid}>
-              <input
-                style={S.input}
-                placeholder="Plot ID *"
-                value={form.plotId}
-                onChange={(e) => setForm({ ...form, plotId: e.target.value })}
-              />
-              <input
-                style={S.input}
-                placeholder="Case Number *"
-                value={form.caseNumber}
-                onChange={(e) =>
-                  setForm({ ...form, caseNumber: e.target.value })
-                }
-              />
-              <input
-                style={S.input}
-                placeholder="Court"
-                value={form.court}
-                onChange={(e) => setForm({ ...form, court: e.target.value })}
-              />
-              <input
-                style={S.input}
-                placeholder="Description"
-                value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
-              />
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                style={{ ...S.btn, ...S.btnDanger }}
-                disabled={!form.plotId || !form.caseNumber}
-                onClick={() =>
-                  doAction("dispute", {
-                    plotId: form.plotId,
-                    caseNumber: form.caseNumber,
-                    court: form.court,
-                    description: form.description,
-                  }).then((ok) => ok && clearForm())
-                }
-              >
-                File Dispute
-              </button>
-              <button
-                style={{ ...S.btn, ...S.btnOutline, ...S.btnSmall }}
-                disabled={!form.plotId}
-                onClick={() =>
-                  doAction("resolve-dispute", { plotId: form.plotId }).then(
-                    (ok) => ok && clearForm(),
-                  )
-                }
-              >
-                Resolve Dispute
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Selected Land Detail */}
@@ -886,46 +651,14 @@ export default function Home() {
               </div>
             )}
           </div>
-          {selected.mortgage && (
-            <div
-              style={{
-                marginTop: 10,
-                padding: "8px 12px",
-                background: "#2a2a0a",
-                borderRadius: 8,
-                fontSize: 13,
-              }}
-            >
-              🏦 <strong>Mortgage:</strong> {selected.mortgage.bank} — Rs.
-              {selected.mortgage.amount} ({selected.mortgage.startDate} to{" "}
-              {selected.mortgage.endDate})
-            </div>
-          )}
-          {selected.dispute && (
-            <div
-              style={{
-                marginTop: 10,
-                padding: "8px 12px",
-                background: "#2a0a0a",
-                borderRadius: 8,
-                fontSize: 13,
-              }}
-            >
-              ⚖️ <strong>Dispute:</strong> Case #{selected.dispute.caseNumber} —{" "}
-              {selected.dispute.court} ({selected.dispute.status})<br />
-              <span style={{ color: "#888" }}>
-                {selected.dispute.description}
-              </span>
-            </div>
-          )}
         </div>
       )}
 
       {/* Sales Tab */}
       {tab === "sales" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Initiate Sale — seller only */}
-          {hasRole("seller") && (
+          {/* Initiate Sale */}
+          {
             <div style={S.formCard}>
               <div style={S.formTitle}>Initiate Sale Proposal</div>
               <div style={S.inputGrid}>
@@ -936,9 +669,7 @@ export default function Home() {
                 >
                   <option value="">-- Select your plot --</option>
                   {lands
-                    .filter(
-                      (l) => l.owner === (userInfo?.username || userInfo?.name),
-                    )
+                    .filter((l) => l.status === "active")
                     .map((l) => (
                       <option key={l.plotId} value={l.plotId}>
                         {l.plotId} — {l.location}
@@ -972,7 +703,7 @@ export default function Home() {
                 Initiate Sale
               </button>
             </div>
-          )}
+          }
 
           {/* Pending Approvals */}
           {salesLoading ? (
@@ -1030,7 +761,7 @@ export default function Home() {
                               .join("  ")
                           : "None yet"}
                       </div>
-                      {hasAnyRole("official", "malpot") && (
+                      {hasRole("official") && (
                         <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
                           <button
                             style={{ ...S.btn, ...S.btnPrimary, ...S.btnSmall }}

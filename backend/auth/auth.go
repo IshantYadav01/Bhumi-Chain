@@ -82,32 +82,14 @@ var userStore = map[string]credential{
 		Roles:        []string{"official"},
 	},
 
-	// ── Bank / Court ────────────────────────────────────────────────
-	"bank1": {
-		// password: bank123
-		PasswordHash: "$2a$10$j5vaJZdanRbCdq4Xyb4jq.N6JnWM9NQ3bKknx9NzfDnX99RIx5W7G",
-		Org:          "province1",
-		User:         "User2",
-		Name:         "State Bank",
-		Roles:        []string{"bank", "seller", "buyer"},
-	},
-	"court1": {
-		// password: court123
-		PasswordHash: "$2a$10$kBYBywz7kr9TK053xuTCvOZNDRjTfRmG8TusrvK.wu2ZNaBFccRh.",
-		Org:          "province1",
-		User:         "User2",
-		Name:         "High Court",
-		Roles:        []string{"court", "seller", "buyer"},
-	},
-
-	// ── Individual sellers / buyers ─────────────────────────────────
+	// ── Individual land owners (seller role is informal — chaincode checks real ownership) ──
 	"seller1": {
 		// password: seller123
 		PasswordHash: "$2a$10$gzYCRsOXKEo7WkDcdl9RM.3OHYNwAoNq1WUcpO1cD9EGpdIjrWKc.",
 		Org:          "province1",
 		User:         "User1",
 		Name:         "Land Owner (Seller)",
-		Roles:        []string{"seller", "buyer"},
+		Roles:        []string{"buyer"},
 	},
 	"buyer1": {
 		// password: buyer123
@@ -133,7 +115,7 @@ var userStore = map[string]credential{
 		Org:          "province1",
 		User:         "User2",
 		Name:         "User Two",
-		Roles:        []string{"court", "bank", "seller", "buyer"},
+		Roles:        []string{"seller", "buyer"},
 	},
 }
 

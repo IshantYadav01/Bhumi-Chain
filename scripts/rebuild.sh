@@ -129,9 +129,9 @@ curl -s -X POST "${API}" -H "Content-Type: application/json" -H "X-Identity: pro
 curl -s -X POST "${API}" -H "Content-Type: application/json" -H "X-Identity: province1/Admin" \
     -d '{"action":"register-user","userId":"User1@province1.example.com","name":"Province1 Official","roles":"[\"admin\",\"malpot\",\"official\",\"seller\",\"buyer\"]"}' 2>/dev/null | grep -q "success" && ok "User1 (admin/malpot/official/seller/buyer)"
 
-# 3. Second user — court + bank + seller roles
+# 3. Second user — seller + buyer roles
 curl -s -X POST "${API}" -H "Content-Type: application/json" -H "X-Identity: province1/Admin" \
-    -d '{"action":"register-user","userId":"User2@province1.example.com","name":"Court & Bank","roles":"[\"court\",\"bank\",\"seller\",\"buyer\"]"}' 2>/dev/null | grep -q "success" && ok "User2 (court/bank/seller/buyer)"
+    -d '{"action":"register-user","userId":"User2@province1.example.com","name":"User Two","roles":"[\"seller\",\"buyer\"]"}' 2>/dev/null | grep -q "success" && ok "User2 (seller/buyer)"
 ok "Roles assigned"
 
 # Probe + land registration use X-Identity (legacy compat with middleware).

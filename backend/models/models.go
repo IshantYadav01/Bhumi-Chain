@@ -29,29 +29,6 @@ type ChildSpec struct {
 	Area   float64 `json:"area"`
 }
 
-type MortgageRequest struct {
-	PlotID    string  `json:"plotId" binding:"required"`
-	Bank      string  `json:"bank" binding:"required"`
-	Amount    float64 `json:"amount"`
-	StartDate string  `json:"startDate"`
-	EndDate   string  `json:"endDate"`
-}
-
-type ClearMortgageRequest struct {
-	PlotID string `json:"plotId" binding:"required"`
-}
-
-type DisputeRequest struct {
-	PlotID      string `json:"plotId" binding:"required"`
-	CaseNumber  string `json:"caseNumber" binding:"required"`
-	Court       string `json:"court"`
-	Description string `json:"description"`
-}
-
-type ResolveDisputeRequest struct {
-	PlotID string `json:"plotId" binding:"required"`
-}
-
 // Unified POST body — action field dispatched by handler.
 type ActionRequest struct {
 	Action string `json:"action" binding:"required"`
@@ -72,15 +49,7 @@ type ActionRequest struct {
 	// Split
 	Children []ChildSpec `json:"children"`
 
-	// Mortgage
-	Bank      string  `json:"bank"`
-	Amount    float64 `json:"amount"`
-	StartDate string  `json:"startDate"`
-	EndDate   string  `json:"endDate"`
-
-	// Dispute
-	CaseNumber  string `json:"caseNumber"`
-	Court       string `json:"court"`
+	// Sale proposals
 	Description string `json:"description"`
 
 	// User management

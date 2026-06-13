@@ -33,8 +33,6 @@ const (
 	RoleOfficial = "official"
 	RoleSeller   = "seller"
 	RoleBuyer    = "buyer"
-	RoleBank     = "bank"
-	RoleCourt    = "court"
 	RoleSurveyor = "surveyor"
 )
 
@@ -70,26 +68,9 @@ type LandRecord struct {
 	LandType       string          `json:"landType"`
 	Status         string          `json:"status"`
 	ParentPlotID   string          `json:"parentPlotId,omitempty"`
-	Mortgage       *MortgageInfo   `json:"mortgage,omitempty"`
-	Dispute        *DisputeInfo    `json:"dispute,omitempty"`
 	TransferCount  int             `json:"transferCount"`
 	LastTransfer   *TransferRecord `json:"lastTransfer,omitempty"`
 	RegisteredDate string          `json:"registeredDate"`
-}
-
-type MortgageInfo struct {
-	Bank      string  `json:"bank"`
-	Amount    float64 `json:"amount"`
-	StartDate string  `json:"startDate"`
-	EndDate   string  `json:"endDate"`
-}
-
-type DisputeInfo struct {
-	CaseNumber  string `json:"caseNumber"`
-	Court       string `json:"court"`
-	FilingDate  string `json:"filingDate"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
 }
 
 type TransferRecord struct {
@@ -328,55 +309,6 @@ func (s *SmartContract) RegisterLand(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  Transfer
-// ═══════════════════════════════════════════════════════════════════════
-
-// TransferLand transfers ownership from the current owner to a buyer.
-//
-// Auth rules:
-//   - The caller must hold the "seller" role AND be the current owner, OR
-//   - The caller must be an admin or official (forced transfer).
-func (s *SmartContract) TransferLand(
-	ctx contractapi.TransactionContextInterface,
-	plotID, buyer string, price float64,
-) error {
-	caller, err := s.callerCN(ctx)
-	if err != nil {
-		return err
-	}
-
-	record, err := s.getLand(ctx, plotID)
-	if err != nil {
-		return err
-	}
-	if record.Status == "disputed" {
-		return fmt.Errorf("land %s under dispute (case %s)", plotID, record.Dispute.CaseNumber)
-	}
-	if record.Status == "mortgaged" {
-		return fmt.Errorf("land %s mortgaged to %s — clear first", plotID, record.Mortgage.Bank)
-	}
-
-	// ── Authorization ──────────────────────────────────────────────
-	isAdminOrOfficial := s.callerHasAnyRole(ctx, RoleAdmin, RoleOfficial)
-	isSellerOwner := s.callerHasRole(ctx, RoleSeller) && record.Owner == caller
-
-	if !isAdminOrOfficial && !isSellerOwner {
-		return fmt.Errorf("only the current owner (%s) with 'seller' role, or an admin/official can transfer land", record.Owner)
-	}
-
-	txID := ctx.GetStub().GetTxID()
-	transfer := TransferRecord{
-		From: record.Owner, To: buyer, Price: price,
-		Date: now(), TxID: txID,
-	}
-	record.PreviousOwner = record.Owner
-	record.Owner = buyer
-	record.TransferCount++
-	record.LastTransfer = &transfer
-	return s.putLand(ctx, record)
-}
-
-// ═══════════════════════════════════════════════════════════════════════
 //  Split
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -394,19 +326,9 @@ func (s *SmartContract) SplitLand(
 	if err != nil {
 		return err
 	}
-	if parent.Status == "disputed" {
-		return fmt.Errorf("cannot split disputed land %s", parentPlotID)
-	}
-	if parent.Status == "mortgaged" {
-		return fmt.Errorf("cannot split mortgaged land %s", parentPlotID)
-	}
-
 	// ── Authorization ──────────────────────────────────────────────
-	isAdminOrOfficial := s.callerHasAnyRole(ctx, RoleAdmin, RoleOfficial)
-	isSellerOwner := s.callerHasRole(ctx, RoleSeller) && parent.Owner == caller
-
-	if !isAdminOrOfficial && !isSellerOwner {
-		return fmt.Errorf("only the current owner (%s) with 'seller' role, or an admin/official can split land", parent.Owner)
+	if parent.Owner != caller {
+		return fmt.Errorf("only the current owner (%s) can split this land", parent.Owner)
 	}
 
 	type ChildSpec struct {
@@ -456,108 +378,6 @@ func (s *SmartContract) SplitLand(
 		}
 	}
 	return nil
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-//  Mortgage
-// ═══════════════════════════════════════════════════════════════════════
-
-// SetMortgage places a mortgage on a land record.  Only bank or admin.
-func (s *SmartContract) SetMortgage(
-	ctx contractapi.TransactionContextInterface,
-	plotID, bank string, amount float64,
-	startDate, endDate string,
-) error {
-	if _, err := s.requireCaller(ctx, RoleBank, RoleAdmin); err != nil {
-		return fmt.Errorf("unauthorized: %w", err)
-	}
-
-	record, err := s.getLand(ctx, plotID)
-	if err != nil {
-		return err
-	}
-	if record.Status == "disputed" {
-		return fmt.Errorf("cannot mortgage disputed land %s", plotID)
-	}
-	if record.Status == "mortgaged" {
-		return fmt.Errorf("land %s already mortgaged to %s", plotID, record.Mortgage.Bank)
-	}
-
-	record.Status = "mortgaged"
-	record.Mortgage = &MortgageInfo{Bank: bank, Amount: amount, StartDate: startDate, EndDate: endDate}
-	return s.putLand(ctx, record)
-}
-
-// ClearMortgage removes a mortgage.  Only bank or admin.
-func (s *SmartContract) ClearMortgage(
-	ctx contractapi.TransactionContextInterface, plotID string,
-) error {
-	if _, err := s.requireCaller(ctx, RoleBank, RoleAdmin); err != nil {
-		return fmt.Errorf("unauthorized: %w", err)
-	}
-
-	record, err := s.getLand(ctx, plotID)
-	if err != nil {
-		return err
-	}
-	if record.Status != "mortgaged" {
-		return fmt.Errorf("land %s is not mortgaged", plotID)
-	}
-	record.Status = "active"
-	record.Mortgage = nil
-	return s.putLand(ctx, record)
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-//  Dispute
-// ═══════════════════════════════════════════════════════════════════════
-
-// FileDispute files a dispute on a land record.
-// Any authenticated user (buyer, seller, official, etc.) or admin may file.
-func (s *SmartContract) FileDispute(
-	ctx contractapi.TransactionContextInterface,
-	plotID, caseNumber, court, description string,
-) error {
-	// ── any authenticated user can file a dispute ──────────────────
-	if _, err := s.requireAnyUser(ctx); err != nil {
-		return fmt.Errorf("unauthorized: %w", err)
-	}
-
-	record, err := s.getLand(ctx, plotID)
-	if err != nil {
-		return err
-	}
-	if record.Status == "disputed" {
-		return fmt.Errorf("land %s already disputed (case %s)", plotID, record.Dispute.CaseNumber)
-	}
-
-	record.Status = "disputed"
-	record.Dispute = &DisputeInfo{
-		CaseNumber: caseNumber, Court: court,
-		FilingDate:  now(),
-		Description: description, Status: "pending",
-	}
-	return s.putLand(ctx, record)
-}
-
-// ResolveDispute resolves a dispute.  Only court or admin.
-func (s *SmartContract) ResolveDispute(
-	ctx contractapi.TransactionContextInterface, plotID string,
-) error {
-	if _, err := s.requireCaller(ctx, RoleCourt, RoleAdmin); err != nil {
-		return fmt.Errorf("unauthorized: %w", err)
-	}
-
-	record, err := s.getLand(ctx, plotID)
-	if err != nil {
-		return err
-	}
-	if record.Status != "disputed" {
-		return fmt.Errorf("land %s is not disputed", plotID)
-	}
-	record.Status = "active"
-	record.Dispute.Status = "resolved"
-	return s.putLand(ctx, record)
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -669,7 +489,7 @@ func (s *SmartContract) InitiateSaleProposal(
 	ctx contractapi.TransactionContextInterface,
 	plotID, buyer string, price float64,
 ) (string, error) {
-	user, err := s.requireCaller(ctx, RoleSeller)
+	user, err := s.requireAnyUser(ctx)
 	if err != nil {
 		return "", fmt.Errorf("unauthorized: %w", err)
 	}
@@ -677,12 +497,6 @@ func (s *SmartContract) InitiateSaleProposal(
 	record, err := s.getLand(ctx, plotID)
 	if err != nil {
 		return "", err
-	}
-	if record.Status == "disputed" {
-		return "", fmt.Errorf("land %s is under dispute — cannot create sale proposal", plotID)
-	}
-	if record.Status == "mortgaged" {
-		return "", fmt.Errorf("land %s is mortgaged to %s — clear mortgage first", plotID, record.Mortgage.Bank)
 	}
 	if record.Status != "active" {
 		return "", fmt.Errorf("land %s is not active (status: %s)", plotID, record.Status)
@@ -708,7 +522,7 @@ func (s *SmartContract) InitiateSaleProposal(
 		Buyer:     buyer,
 		Price:     price,
 		Status:    "pending",
-		Approvals: map[string]bool{"municipality": false, "survey": false, "malpot": false},
+		Approvals: map[string]bool{"municipality": false},
 		CreatedAt: now(),
 	}
 	if err := s.putSaleProposal(ctx, &proposal); err != nil {
@@ -733,10 +547,10 @@ func (s *SmartContract) findActiveProposalForPlot(ctx contractapi.TransactionCon
 	return nil, nil
 }
 
-// ApproveSaleProposal allows municipality, survey, or malpot to approve a proposal.
-// If all three have approved, the proposal is auto-executed.
+// ApproveSaleProposal allows an official (municipality) to approve a proposal.
+// Once the municipality approves, the transfer is auto-executed.
 func (s *SmartContract) ApproveSaleProposal(ctx contractapi.TransactionContextInterface, proposalID string) error {
-	user, err := s.requireCaller(ctx, RoleOfficial, RoleSurveyor, RoleMalpot)
+	_, err := s.requireCaller(ctx, RoleOfficial)
 	if err != nil {
 		return fmt.Errorf("unauthorized: %w", err)
 	}
@@ -749,37 +563,19 @@ func (s *SmartContract) ApproveSaleProposal(ctx contractapi.TransactionContextIn
 		return fmt.Errorf("sale proposal %s is %s — cannot approve", proposalID, proposal.Status)
 	}
 
-	// Fill ALL approval slots the caller qualifies for.
-	approverRoles := s.callerApprovalRoles(user)
-	if len(approverRoles) == 0 {
-		return fmt.Errorf("user %s does not hold an approver role (municipality/official, survey, malpot)", user.ID)
+	if proposal.Approvals["municipality"] {
+		return fmt.Errorf("municipality already approved this proposal")
 	}
 
-	anyApproved := false
-	for _, role := range approverRoles {
-		if approved, exists := proposal.Approvals[role]; !exists {
-			continue
-		} else if approved {
-			continue // already approved by this role
-		}
-		proposal.Approvals[role] = true
-		anyApproved = true
-	}
-
-	if !anyApproved {
-		return fmt.Errorf("user %s has already approved all their eligible roles", user.ID)
-	}
-
+	proposal.Approvals["municipality"] = true
 	proposal.Status = "approved"
 
-	// Check if all three have approved → auto-execute.
-	if proposal.Approvals["municipality"] && proposal.Approvals["survey"] && proposal.Approvals["malpot"] {
-		if err := s.executeTransfer(ctx, proposal); err != nil {
-			return err
-		}
-		proposal.Status = "executed"
-		proposal.ExecutedAt = now()
+	// Auto-execute the transfer.
+	if err := s.executeTransfer(ctx, proposal); err != nil {
+		return err
 	}
+	proposal.Status = "executed"
+	proposal.ExecutedAt = now()
 
 	return s.putSaleProposal(ctx, proposal)
 }
@@ -787,13 +583,8 @@ func (s *SmartContract) ApproveSaleProposal(ctx contractapi.TransactionContextIn
 // callerApprovalRole maps the caller's roles to the approval role key.
 func (s *SmartContract) callerApprovalRole(user *User) string {
 	for _, r := range user.Roles {
-		switch r {
-		case RoleOfficial:
+		if r == RoleOfficial {
 			return "municipality"
-		case RoleSurveyor:
-			return "survey"
-		case RoleMalpot:
-			return "malpot"
 		}
 	}
 	return ""
@@ -802,28 +593,18 @@ func (s *SmartContract) callerApprovalRole(user *User) string {
 // callerApprovalRoles returns ALL approval role keys the user qualifies for.
 func (s *SmartContract) callerApprovalRoles(user *User) []string {
 	var roles []string
-	seen := map[string]bool{}
 	for _, r := range user.Roles {
-		var key string
-		switch r {
-		case RoleOfficial:
-			key = "municipality"
-		case RoleSurveyor:
-			key = "survey"
-		case RoleMalpot:
-			key = "malpot"
-		}
-		if key != "" && !seen[key] {
-			seen[key] = true
-			roles = append(roles, key)
+		if r == RoleOfficial {
+			roles = append(roles, "municipality")
+			return roles
 		}
 	}
 	return roles
 }
 
-// RejectSaleProposal allows any of the three approver roles to reject a proposal.
+// RejectSaleProposal allows an official (municipality) to reject a proposal.
 func (s *SmartContract) RejectSaleProposal(ctx contractapi.TransactionContextInterface, proposalID, reason string) error {
-	user, err := s.requireCaller(ctx, RoleOfficial, RoleSurveyor, RoleMalpot)
+	_, err := s.requireCaller(ctx, RoleOfficial)
 	if err != nil {
 		return fmt.Errorf("unauthorized: %w", err)
 	}
@@ -836,18 +617,13 @@ func (s *SmartContract) RejectSaleProposal(ctx contractapi.TransactionContextInt
 		return fmt.Errorf("sale proposal %s is %s — cannot reject", proposalID, proposal.Status)
 	}
 
-	role := s.callerApprovalRole(user)
-	if role == "" {
-		return fmt.Errorf("user %s does not hold an approver role", user.ID)
-	}
-
 	proposal.Status = "rejected"
 	proposal.RejectReason = reason
 	return s.putSaleProposal(ctx, proposal)
 }
 
-// ExecuteSaleProposal performs the land transfer for a fully-approved proposal.
-// Any authenticated user can call, but all three approvals must be present.
+// ExecuteSaleProposal performs the land transfer for a municipality-approved proposal.
+// Any authenticated user can call, but municipal approval must be present.
 func (s *SmartContract) ExecuteSaleProposal(ctx contractapi.TransactionContextInterface, proposalID string) error {
 	if _, err := s.requireAnyUser(ctx); err != nil {
 		return fmt.Errorf("unauthorized: %w", err)
@@ -860,8 +636,8 @@ func (s *SmartContract) ExecuteSaleProposal(ctx contractapi.TransactionContextIn
 	if proposal.Status != "approved" {
 		return fmt.Errorf("sale proposal %s is %s — must be 'approved' to execute", proposalID, proposal.Status)
 	}
-	if !proposal.Approvals["municipality"] || !proposal.Approvals["survey"] || !proposal.Approvals["malpot"] {
-		return fmt.Errorf("sale proposal %s does not have all three approvals", proposalID)
+	if !proposal.Approvals["municipality"] {
+		return fmt.Errorf("sale proposal %s has not been approved by municipality", proposalID)
 	}
 
 	if err := s.executeTransfer(ctx, proposal); err != nil {
@@ -879,13 +655,6 @@ func (s *SmartContract) executeTransfer(ctx contractapi.TransactionContextInterf
 	if err != nil {
 		return err
 	}
-	if record.Status == "disputed" {
-		return fmt.Errorf("land %s under dispute — cannot transfer", proposal.PlotID)
-	}
-	if record.Status == "mortgaged" {
-		return fmt.Errorf("land %s mortgaged — clear mortgage first", proposal.PlotID)
-	}
-
 	txID := ctx.GetStub().GetTxID()
 	transfer := TransferRecord{
 		From:  record.Owner,
