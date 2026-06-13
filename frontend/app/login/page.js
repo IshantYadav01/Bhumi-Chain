@@ -55,93 +55,90 @@ export default function LoginPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0f0f0f] p-5">
-      <div className="bg-[#1a1a2e] rounded-2xl border border-[#2a2a3e] p-10 w-full max-w-md">
-        <h1 className="text-2xl font-bold text-[#7c3aed] m-0 mb-1">
-          Land Registry
-        </h1>
-        <p className="text-sm text-[#888] mb-7">
-          {mode === "login" ? "Sign in with your NID" : "Create a new account"}
-        </p>
-
-        {error && (
-          <div className="bg-[#3b1111] border border-[#ef4444] rounded-md px-3 py-2 text-xs text-[#fca5a5] mb-3">
-            {error}
-          </div>
-        )}
-
-        <label className="text-xs text-[#aaa] block mb-1">
-          National ID (NID)
-        </label>
-        <input
-          className="w-full bg-[#0f0f1a] border border-[#333] rounded-lg px-3.5 py-2.5 text-sm text-[#e0e0e0] mb-3.5"
-          placeholder="e.g. admin, NID-001"
-          value={nid}
-          onChange={(e) => setNid(e.target.value)}
-        />
-
-        <label className="text-xs text-[#aaa] block mb-1">Password</label>
-        <input
-          className="w-full bg-[#0f0f1a] border border-[#333] rounded-lg px-3.5 py-2.5 text-sm text-[#e0e0e0] mb-3.5"
-          type="password"
-          placeholder="e.g. admin123, pass123"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        {mode === "signup" && (
-          <>
-            <label className="text-xs text-[#aaa] block mb-1">Full Name</label>
-            <input
-              className="w-full bg-[#0f0f1a] border border-[#333] rounded-lg px-3.5 py-2.5 text-sm text-[#e0e0e0] mb-3.5"
-              placeholder="Your full name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-
-            <label className="text-xs text-[#aaa] block mb-1">Role</label>
-            <select
-              className="w-full bg-[#0f0f1a] border border-[#333] rounded-lg px-3.5 py-2.5 text-sm text-[#e0e0e0] mb-3.5"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-            >
-              <option value="customer">Customer (buy/sell)</option>
-              <option value="admin">Admin (register & approve)</option>
-            </select>
-          </>
-        )}
-
-        <button
-          className={`w-full py-2.5 rounded-lg text-sm font-semibold mt-1 ${
-            loading || !nid || !password
-              ? "bg-[#7c3aed] text-white opacity-40 cursor-not-allowed"
-              : "bg-[#7c3aed] text-white cursor-pointer"
-          }`}
-          disabled={loading || !nid || !password}
-          onClick={mode === "login" ? handleLogin : handleSignup}
-        >
-          {loading
-            ? "Please wait..."
-            : mode === "login"
-              ? "Sign In"
-              : "Create Account"}
-        </button>
-
-        <hr className="border-[#2a2a3e] my-5" />
-
-        <p
-          className="text-xs text-[#888] text-center cursor-pointer"
-          onClick={() => {
-            setMode(mode === "login" ? "signup" : "login");
-            setError("");
-          }}
-        >
-          {mode === "login"
-            ? "Don't have an account? Sign up"
-            : "Already have an account? Sign in"}
-        </p>
+  return (<div className="min-h-screen flex items-center justify-center bg-[#F6F8FA] p-5">
+    <div className="bg-[#FFFFFF] rounded-2xl border border-[#D0D7DE] p-10 pt-0 w-full max-w-md shadow-sm">
+      <div className="flex items-center justify-center">
+        <img src="/images/logo.svg" alt="Land Registry" className="h-32 border" />
       </div>
+      <p className="text-sm text-[#57606A] mb-7">
+        {mode === "login" ? "Sign in with your NID" : "Create a new account"}
+      </p>
+
+      {error && (
+        <div className="bg-[#FFEBEB] border border-[#FFC1C1] rounded-md px-3 py-2 text-xs text-[#CF222E] mb-3 font-medium">
+          {error}
+        </div>
+      )}
+
+      <label className="text-xs text-[#57606A] block mb-1 font-medium">
+        National ID (NID)
+      </label>
+      <input
+        className="w-full bg-[#FFFFFF] border border-[#D0D7DE] rounded-lg px-3.5 py-2.5 text-sm text-[#24292F] placeholder-[#8C95A0] focus:outline-none focus:border-[#3B5BDB] transition-colors mb-3.5"
+        placeholder="e.g. admin, NID-001"
+        value={nid}
+        onChange={(e) => setNid(e.target.value)}
+      />
+
+      <label className="text-xs text-[#57606A] block mb-1 font-medium">Password</label>
+      <input
+        className="w-full bg-[#FFFFFF] border border-[#D0D7DE] rounded-lg px-3.5 py-2.5 text-sm text-[#24292F] placeholder-[#8C95A0] focus:outline-none focus:border-[#3B5BDB] transition-colors mb-3.5"
+        type="password"
+        placeholder="e.g. admin123, pass123"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+
+      {mode === "signup" && (
+        <>
+          <label className="text-xs text-[#57606A] block mb-1 font-medium">Full Name</label>
+          <input
+            className="w-full bg-[#FFFFFF] border border-[#D0D7DE] rounded-lg px-3.5 py-2.5 text-sm text-[#24292F] placeholder-[#8C95A0] focus:outline-none focus:border-[#3B5BDB] transition-colors mb-3.5"
+            placeholder="Your full name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+
+          <label className="text-xs text-[#57606A] block mb-1 font-medium">Role</label>
+          <select
+            className="w-full bg-[#F6F8FA] border border-[#D0D7DE] rounded-lg px-3.5 py-2.5 text-sm text-[#24292F] focus:outline-none focus:border-[#3B5BDB] focus:bg-[#FFFFFF] transition-colors mb-3.5"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+          >
+            <option value="customer">Customer (buy/sell)</option>
+            <option value="admin">Admin (register & approve)</option>
+          </select>
+        </>
+      )}
+
+      <button
+        className={`w-full py-2.5 rounded-lg text-sm font-semibold mt-1 transition-colors ${loading || !nid || !password
+          ? "bg-[#3B5BDB] text-white opacity-40 cursor-not-allowed"
+          : "bg-[#3B5BDB] text-white hover:bg-[#2F4AC4] cursor-pointer"
+          }`}
+        disabled={loading || !nid || !password}
+        onClick={mode === "login" ? handleLogin : handleSignup}
+      >
+        {loading
+          ? "Please wait..."
+          : mode === "login"
+            ? "Sign In"
+            : "Create Account"}
+      </button>
+
+      <hr className="border-[#F0F2F5] my-5" />
+
+      <p
+        className="text-xs text-[#57606A] text-center cursor-pointer hover:text-[#3B5BDB] font-medium transition-colors"
+        onClick={() => {
+          setMode(mode === "login" ? "signup" : "login");
+          setError("");
+        }}
+      >
+        {mode === "login"
+          ? "Don't have an account? Sign up"
+          : "Already have an account? Sign in"}
+      </p>
     </div>
-  );
+  </div>);
 }

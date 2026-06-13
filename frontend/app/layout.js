@@ -1,4 +1,11 @@
+import { Poppins } from "next/font/google";
 import "./globals.css";
+
+const poppins = Poppins({
+  subsets: ["latin", "devanagari"],
+  weight: ["400", "500", "600"],
+  variable: "--font-poppins",
+});
 
 export const metadata = {
   title: "Land Registry — Private Blockchain",
@@ -7,7 +14,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className="m-0 font-sans bg-[#0f0f0f] text-[#e0e0e0]">
+      <body
+        className={`${poppins.variable} font-[family-name:var(--font-poppins)] m-0 text-[#0C0E12] bg-[#E6EDF3]`}
+      >
         {children}
       </body>
     </html>
