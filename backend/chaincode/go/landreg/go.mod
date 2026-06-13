@@ -6,6 +6,7 @@ require (
 	github.com/hyperledger/fabric-chaincode-go/v2 v2.0.0-20240618210511-f7903324a8af
 	github.com/hyperledger/fabric-contract-api-go/v2 v2.0.0
 	github.com/hyperledger/fabric-protos-go-apiv2 v0.3.3
+	google.golang.org/protobuf v1.34.2
 )
 
 require (
@@ -29,6 +30,5 @@ require (
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
 	google.golang.org/grpc v1.64.0 // indirect
-	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

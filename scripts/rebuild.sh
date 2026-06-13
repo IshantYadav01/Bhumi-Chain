@@ -39,7 +39,6 @@ cd "$PROJ/network"
 ok "Dependencies ready"
 
 log "Tearing down..."
-cd network
 docker compose --project-directory .. down -v --remove-orphans 2>/dev/null || true
 docker rmi -f $(docker images -q --filter "reference=dev-peer*landreg*") 2>/dev/null || true
 rm -rf organizations channel-artifacts
@@ -116,23 +115,33 @@ for attempt in $(seq 1 20); do
 done
 
 API="http://localhost:8080/api/land"
+AUTH="http://localhost:8080/api"
 
-# Seed: register lands for different usernames
+# Get admin token for seeding
+log "Authenticating for seed..."
+TOKEN=$(curl -sf -X POST "${AUTH}/login" -H "Content-Type: application/json" \
+    -d '{"nid":"admin","password":"admin123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+if [ -z "$TOKEN" ]; then
+    log "WARNING: Could not get admin token, skipping seed"
+else
+# Seed: register lands
 for attempt in $(seq 1 15); do
-    curl -s -X POST "${API}" -H "Content-Type: application/json" \
-        -d '{"action":"register","plotId":"_probe","owner":"alice","location":"X","area":1}' 2>/dev/null | grep -q "success" && break
+    curl -s -X POST "${API}" -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"action":"register","plotId":"_probe","owner":"NID-001","location":"Seed","area":1}' 2>/dev/null | grep -q "success" && break
     sleep 2
 done
 
 for i in 1 2 3 4; do
     loc="Location${i}"
-    [ $((i % 2)) -eq 1 ] && own="alice" || own="bob"
+    [ $((i % 2)) -eq 1 ] && own="NID-001" || own="NID-002"
     for retry in $(seq 1 5); do
-        curl -s -X POST "${API}" -H "Content-Type: application/json" \
+        curl -s -X POST "${API}" -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" \
             -d "{\"action\":\"register\",\"plotId\":\"plot-00${i}\",\"owner\":\"${own}\",\"location\":\"${loc}\",\"area\":$((i*200))}" 2>/dev/null | grep -q "success" && { ok "plot-00${i}"; break; }
         sleep 2
     done
 done
+fi
 
 echo ""
 ok "==============================="
