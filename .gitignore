@@ -7,7 +7,7 @@ node_modules/
 package-lock.json
 
 # ── Go ──────────────────────────────────────────────────────────────
-*.sum
+*.tar.gz.sum
 vendor/
 
 # ── Go backend artifacts ────────────────────────────────────────────
