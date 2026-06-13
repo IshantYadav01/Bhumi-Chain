@@ -151,7 +151,8 @@ done
 ok "Channel artifacts done"
 
 # 6. Start network
-log "Starting 3 provincial peers..."
+log "Building images + starting network..."
+COMPOSE_PROJECT_NAME=fabric docker compose build 2>&1
 COMPOSE_PROJECT_NAME=fabric docker compose up -d
 sleep 10
 ok "Network started"
@@ -217,29 +218,9 @@ done
 peer_cmd "peer lifecycle chaincode commit -o orderer.example.com:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${ORDERER_CA} --channelID mychannel --name ${CC} --version ${CV} --sequence ${CS} ${PA}" 2>&1 | tail -1
 ok "Chaincode committed"
 
-# 10. Build & start Go backend
-log "Building Go backend (Fabric Gateway SDK)..."
-cd ../backend
-pkill -f 'backend/server' 2>/dev/null || true
-go mod tidy 2>&1
-go build -o server . 2>&1
-if [ $? -eq 0 ]; then
-    ok "Go backend built"
-    PROJECT_ROOT="$(pwd)/.." nohup ./server > backend.log 2>&1 &
-    sleep 2
-    if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
-        ok "Go backend running on :8080"
-    else
-        log "Go backend may still be starting (check backend/backend.log)"
-    fi
-else
-    log "Go build failed - cannot seed"
-    exit 1
-fi
-cd ..
-
-# 11. Seed samples via Go backend (not docker exec CLI)
-log "Seeding sample plots via Go backend..."
+# 10. Wait for backend container + seed
+log "Waiting for backend container..."
+log "Seeding sample plots..."
 # Wait for gateway to be ready for transactions (not just health)
 for attempt in $(seq 1 15); do
     if curl -s -X POST http://localhost:8080/api/land         -H "Content-Type: application/json"         -d '{"action":"register","plotId":"_probe","surveyNumber":"X","owner":"X","area":1}' 2>/dev/null | grep -q "success"; then
@@ -267,6 +248,6 @@ echo ""
 ok "======================================="
 ok "  Land Registry is LIVE!"
 ok "  Frontend : http://localhost:3000"
-ok "  Backend  : http://localhost:8080"
+ok "  All services in Docker"
 ok "  Health   : http://localhost:8080/health"
 ok "======================================="

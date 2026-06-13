@@ -37,11 +37,11 @@ Land records track ownership, mortgages, and legal disputes. Transfers require e
 
 | Layer | Who | Count | Runs |
 |-------|-----|-------|------|
-| **Full node** | Provincial governing body | 3 (test) / 11 (prod) | Docker containers — hold ledger, endorse |
-| **Lite node** | Malpots, buyers, sellers, officials | Unlimited (77 malpots) | Browser / SDK — submit, query, no ledger |
+| **Full node** | Provincial governing body | 3 (test) / 11 (prod) | Docker container |
+| **Lite node** | Malpots, buyers, sellers, officials | Unlimited | Browser / SDK |
 | **Orderer** | RAFT ordering service | 1 (dev) | Docker container |
-| **Backend** | Go REST API gateway | 1 | Host process — connects to peers via gRPC |
-| **Frontend** | Next.js dashboard | 1 | Browser — proxies API calls to backend |
+| **Backend** | Go REST API gateway | 1 | Docker container |
+| **Frontend** | Next.js dashboard | 1 | Docker container |
 
 **Land states**: `active` → `mortgaged` → `disputed` → `split`. Mortgaged or disputed land **cannot** be transferred.
 
@@ -53,33 +53,25 @@ Land records track ownership, mortgages, and legal disputes. Transfers require e
 |------|-----|-------|
 | Docker | 20.10+ | `docker --version` |
 | Docker Compose | 2.0+ | `docker compose version` |
-| Node.js | 18+ | `node --version` |
-| Go | 1.22+ | `go version` |
-| curl | any | `curl --version` |
 
-> No Fabric binaries needed — everything runs inside Docker.
+> Everything — Go, Node, Fabric — runs inside Docker. No host dependencies.
 
 ---
 
 ## Quick Start
 
 ```bash
-# First time: full build (tear down, generate crypto, deploy chaincode, seed)
+# First time: full build (generates crypto, deploys chaincode, seeds data)
 ./scripts/rebuild.sh
 
-# Fast reload: ~4s restart without rebuilding Fabric
-./scripts/quickstart.sh           # backend only
-./scripts/quickstart.sh -f        # backend + frontend
+# Fast restart: brings up containers if stopped
+./scripts/quickstart.sh
+
+# Stop everything
+./scripts/stop.sh
 ```
 
 Open **http://localhost:3000** — live land registry dashboard.
-
-Network endpoints:
-- Go backend: **http://localhost:8080** (health: `/health`)
-- `orderer.example.com:7050`
-- `peer0.province1.example.com:7051`
-- `peer0.province2.example.com:8051`
-- `peer0.province3.example.com:9051`
 
 ---
 
@@ -87,42 +79,38 @@ Network endpoints:
 
 ```
 ndhack/
-├── backend/                        # ★ Go backend (Fabric Gateway SDK + chaincode)
+├── backend/                        # Go backend + chaincode
+│   ├── Dockerfile                  # Builds Go server in alpine container
 │   ├── main.go                     # HTTP server (Gin, :8080)
 │   ├── go.mod / go.sum             # Module: github.com/ndhack/backend
-│   ├── server                      # Compiled binary
-│   ├── config/
-│   │   └── config.go               # Environment-based configuration
+│   ├── config/config.go            # Auto-detects Docker vs host mode
 │   ├── fabric/
-│   │   ├── client.go               # Gateway client pool (gRPC)
-│   │   └── identity.go             # X.509 identity loader (from MSP dirs)
-│   ├── handlers/
-│   │   └── land.go                 # All 13 REST API endpoints
-│   ├── models/
-│   │   └── models.go               # Request/response DTOs
+│   │   ├── client.go               # Gateway client pool (gRPC to peers)
+│   │   └── identity.go             # X.509 identity loader (MSP directories)
+│   ├── handlers/land.go            # All 13 REST API endpoints
+│   ├── models/models.go            # Request/response DTOs
 │   └── chaincode/go/landreg/       # Smart contract (fabric-contract-api-go)
 │       ├── landreg.go              # 12 chaincode functions
 │       └── go.mod / go.sum
 │
 ├── network/
-│   ├── docker-compose.yaml         # orderer + 3 provincial peers + CLI
-│   ├── crypto-config.yaml          # org topology → generates MSP certs
-│   ├── configtx.yaml               # channel, genesis, consortium (auto-generated)
-│   ├── core.yaml                   # peer config reference
-│   └── orderer.yaml                # orderer config reference
+│   ├── docker-compose.yaml         # 7 services: orderer, 3 peers, CLI, backend, frontend
+│   ├── crypto-config.yaml          # Org topology → generates MSP certs
+│   ├── configtx.yaml               # Channel, genesis, consortium (auto-generated)
+│   ├── core.yaml                   # Peer config reference
+│   └── orderer.yaml                # Orderer config reference
 │
 ├── frontend/                       # Next.js dashboard
-│   ├── app/
-│   │   ├── page.js                 # land registry UI
-│   │   ├── layout.js
-│   └── next.config.js              # proxy /api/* → :8080
-│
-├── application/                    # lite-node SDK client (unused — reference only)
-│   └── src/                        # connect, enroll, register, invoke, query
+│   ├── Dockerfile                  # Builds Node.js dev server in container
+│   ├── app/page.js                 # Land registry UI
+│   ├── app/layout.js               # Root layout (dark theme)
+│   ├── next.config.js              # Proxies /api/* → backend:8080
+│   └── package.json                # next + react only
 │
 ├── scripts/
-│   ├── rebuild.sh                  # ★ one-command full rebuild
-│   └── stop.sh                     # tear down (Fabric + Go backend)
+│   ├── rebuild.sh                  # Full rebuild (crypto → channel → chaincode → seed)
+│   ├── quickstart.sh               # docker compose up --build
+│   └── stop.sh                     # docker compose down -v
 │
 ├── .gitignore
 ├── README.md
@@ -133,14 +121,14 @@ ndhack/
 
 ## Go Backend (Fabric Gateway SDK)
 
-The backend replaces the old `docker exec cli peer chaincode` approach with native gRPC. Key improvements:
+The backend connects to Fabric peers via native gRPC — no `docker exec` CLI dependency.
 
 | Before | After |
 |--------|-------|
-| `child_process.execSync` blocks Node.js event loop | Go goroutines — concurrent, non-blocking |
+| `child_process.execSync` blocks Node.js | Go goroutines — concurrent, non-blocking |
 | Shared CLI container identity | Per-user X.509 identity via `X-Identity` header |
 | `docker exec` for every transaction | Direct gRPC to peer gateway service |
-| No non-repudiation | Each user signs with their own private key |
+| Works on some machines, not others | Identical Docker environment everywhere |
 
 ### API Endpoints
 
@@ -155,7 +143,7 @@ GET  /api/land?parent=PLOT-001        → GetChildrenOf(PLOT-001)
 
 POST /api/land  {"action":"register", "plotId":"...", "owner":"...", ...}
 POST /api/land  {"action":"transfer", "plotId":"...", "buyer":"...", ...}
-POST /api/land  {"action":"split", "plotId":"...", "children":[...], ...}
+POST /api/land  {"action":"split", "plotId":"...", "children":[...]}
 POST /api/land  {"action":"mortgage", "plotId":"...", "bank":"...", ...}
 POST /api/land  {"action":"clear-mortgage", "plotId":"..."}
 POST /api/land  {"action":"dispute", "plotId":"...", "caseNumber":"...", ...}
@@ -164,42 +152,15 @@ POST /api/land  {"action":"resolve-dispute", "plotId":"..."}
 
 ### Per-User Identity
 
-Set the `X-Identity` header to sign as a specific user:
-
 ```bash
 # Sign as province1 admin (default)
 curl http://localhost:8080/api/land
 
 # Sign as province2 malpot official
 curl -H "X-Identity: province2/User1" http://localhost:8080/api/land
-
-# Sign as province3 official
-curl -X POST http://localhost:8080/api/land \
-  -H "Content-Type: application/json" \
-  -H "X-Identity: province3/User1" \
-  -d '{"action":"register","plotId":"P-99","owner":"CitizenX","area":150}'
 ```
 
-Identities are loaded from the cryptogen-generated MSP directories. In production, replace with Fabric CA for dynamic enrollment.
-
----
-
-## Frontend Dashboard
-
-Start: `cd frontend && npm run dev` → http://localhost:3000
-
-| Feature | How |
-|---------|-----|
-| **Land table** | Auto-refreshes every 8s |
-| **Register land** | Fill form → "Register Land" |
-| **Transfer land** | Plot ID + buyer + price → "Transfer Land" |
-| **Mortgage** | Plot ID + bank + amount + dates |
-| **Dispute** | Plot ID + case number + court |
-| **Status filter** | Tabs: All / Active / Mortgaged / Disputed |
-| **Owner filter** | Search by owner name |
-| **Detail panel** | Click any row → full land details |
-
-The frontend calls the Go backend via Next.js proxy (`/api/*` → `:8080`). No `docker exec` required.
+In production, replace cryptogen with Fabric CA for dynamic enrollment.
 
 ---
 
@@ -221,13 +182,13 @@ The frontend calls the Go backend via Next.js proxy (`/api/*` → `:8080`). No `
 | `GetChildrenOf` | `parentPlotId` |
 | `GetAllLand` | _(none)_ |
 
-**Endorsement**: `OutOf(3, Province1MSP.peer, Province2MSP.peer, Province3MSP.peer)` — all 3 provinces.
+**Endorsement**: `OutOf(3, Province1MSP.peer, Province2MSP.peer, Province3MSP.peer)`.
 
 ---
 
 ## Scaling to Production (11 full nodes)
 
-Change `3` → `11` in these files:
+Change `3` → `11` in:
 
 | File | Change |
 |------|--------|
@@ -235,34 +196,26 @@ Change `3` → `11` in these files:
 | `scripts/rebuild.sh` | `seq 1 3` → `seq 1 11` |
 | `scripts/rebuild.sh` | `OutOf(3, ...)` → `OutOf(9, ...)` endorsement |
 
-Endorsement: 9 of 11 = 75% approval threshold.
+Endorsement: 9 of 11 = 75% approval.
 
 ---
 
 ## Useful Commands
 
 ```bash
-# Build & run Go backend standalone
-cd backend && PROJECT_ROOT=$(pwd)/.. ./server
-
-# Stop everything
-./scripts/stop.sh --clean
-
 # Logs
+docker logs landreg-backend -f
+docker logs landreg-frontend -f
 docker logs peer0.province1.example.com -f
-docker logs orderer.example.com -f
-cat backend/backend.log
 
 # Admin shell
 docker exec -it cli bash
 
-# List committed chaincodes
+# Chaincode info
 docker exec cli peer lifecycle chaincode querycommitted -C mychannel
-
-# Channel info
 docker exec cli peer channel getinfo -c mychannel
 
-# Backend health check
+# Backend health
 curl http://localhost:8080/health
 ```
 
@@ -273,7 +226,7 @@ curl http://localhost:8080/health
 - **Fabric CA** — replace `cryptogen` with a real CA for dynamic identity management
 - **RAFT cluster** — run 3–5 orderers for fault tolerance
 - **CouchDB** — swap `goleveldb` → `CouchDB` for rich queries
-- **Real TLS** — disable `InsecureSkipVerify` and configure proper hostname verification
+- **TLS** — Docker DNS matches cert SANs, no skip needed
 - **Hardware** — 2 GB RAM per peer, 1 GB per orderer (minimum)
 
 ## License
