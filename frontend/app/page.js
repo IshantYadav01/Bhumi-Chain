@@ -263,7 +263,7 @@ export default function Home() {
           {/* Brand */}
           <div className="flex items-center gap-3 shrink-0">
             {/* Registry mark — a simple civic device, no emoji */}
-            <img src="/images/logo.svg" alt="Land Registry" className="h-20" />
+            <img src="/images/logo.png" alt="Land Registry" className="h-8" />
             <div>
               {/* <span className="hidden sm:inline text-[11px] text-[#57606A] ml-2 font-normal">
                 Hyperledger Fabric

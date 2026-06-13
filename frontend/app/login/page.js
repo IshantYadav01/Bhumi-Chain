@@ -56,13 +56,16 @@ export default function LoginPage() {
   };
 
   return (<div className="min-h-screen flex items-center justify-center bg-[#F6F8FA] p-5">
-    <div className="bg-[#FFFFFF] rounded-2xl border border-[#D0D7DE] p-10 pt-0 w-full max-w-md shadow-sm">
-      <div className="flex items-center justify-center">
-        <img src="/images/logo.svg" alt="Land Registry" className="h-32 border" />
+    <div className="bg-[#FFFFFF] rounded-2xl border border-[#D0D7DE] p-10 w-full max-w-md shadow-sm">
+      <div className="flex items-center justify-center flex-col">
+        <img src="/images/logo.png" alt="Land Registry" className="h-10 mb-2" />
+        <p className="text-xs text-[#57606A]  text-center mb-4">
+          Tamper-proof land registry system where every transfer, offer, and approval is permanently recorded on-chain.
+        </p>
       </div>
-      <p className="text-sm text-[#57606A] mb-7">
-        {mode === "login" ? "Sign in with your NID" : "Create a new account"}
-      </p>
+      {/* <p className="text-sm text-[#57606A] mb-7">
+        {mode === "login" ? "Please sign in!" : "Create a new account"}
+      </p> */}
 
       {error && (
         <div className="bg-[#FFEBEB] border border-[#FFC1C1] rounded-md px-3 py-2 text-xs text-[#CF222E] mb-3 font-medium">
@@ -75,7 +78,7 @@ export default function LoginPage() {
       </label>
       <input
         className="w-full bg-[#FFFFFF] border border-[#D0D7DE] rounded-lg px-3.5 py-2.5 text-sm text-[#24292F] placeholder-[#8C95A0] focus:outline-none focus:border-[#3B5BDB] transition-colors mb-3.5"
-        placeholder="e.g. admin, NID-001"
+        placeholder="Enter your NID"
         value={nid}
         onChange={(e) => setNid(e.target.value)}
       />
@@ -84,7 +87,7 @@ export default function LoginPage() {
       <input
         className="w-full bg-[#FFFFFF] border border-[#D0D7DE] rounded-lg px-3.5 py-2.5 text-sm text-[#24292F] placeholder-[#8C95A0] focus:outline-none focus:border-[#3B5BDB] transition-colors mb-3.5"
         type="password"
-        placeholder="e.g. admin123, pass123"
+        placeholder="Enter your password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
       />
