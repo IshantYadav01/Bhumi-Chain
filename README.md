@@ -1,4 +1,4 @@
-# Land Registry — Private Blockchain System
+# Bhumi-Chain— Private Blockchain System
 
 A **Hyperledger Fabric v2.5** land registry on a private blockchain. Citizens buy, sell, and transfer land with full on-chain audit trail. All transactions are verified by a 3-peer endorsement network and permanently recorded on the ledger.
 
